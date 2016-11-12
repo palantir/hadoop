@@ -50,4 +50,4 @@ deployment:
   snapshot:
     branch: branch-2
     commands:
-      - curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/hadoop/$(git describe --tags --always)/publish
+      - curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/hadoop/branch-2-$(git describe --tags --always)/publish
