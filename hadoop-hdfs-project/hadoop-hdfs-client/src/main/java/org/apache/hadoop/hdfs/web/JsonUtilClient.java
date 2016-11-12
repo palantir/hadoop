@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hdfs.web;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import org.apache.hadoop.fs.ContentSummary;
@@ -33,6 +34,8 @@ import org.apache.hadoop.fs.permission.AclStatus;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo.DatanodeInfoBuilder;
+import org.apache.hadoop.hdfs.protocol.DirectoryListing;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.FsPermissionExtension;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
@@ -141,6 +144,38 @@ class JsonUtilClient {
         storagePolicy);
   }
 
+  static HdfsFileStatus[] toHdfsFileStatusArray(final Map<?, ?> json) {
+    Preconditions.checkNotNull(json);
+    final Map<?, ?> rootmap =
+        (Map<?, ?>)json.get(FileStatus.class.getSimpleName() + "es");
+    final List<?> array = JsonUtilClient.getList(rootmap,
+        FileStatus.class.getSimpleName());
+
+    // convert FileStatus
+    Preconditions.checkNotNull(array);
+    final HdfsFileStatus[] statuses = new HdfsFileStatus[array.size()];
+    int i = 0;
+    for (Object object : array) {
+      final Map<?, ?> m = (Map<?, ?>) object;
+      statuses[i++] = JsonUtilClient.toFileStatus(m, false);
+    }
+    return statuses;
+  }
+
+  static DirectoryListing toDirectoryListing(final Map<?, ?> json) {
+    if (json == null) {
+      return null;
+    }
+    final Map<?, ?> listing = getMap(json, "DirectoryListing");
+    final Map<?, ?> partialListing = getMap(listing, "partialListing");
+    HdfsFileStatus[] fileStatuses = toHdfsFileStatusArray(partialListing);
+
+    int remainingEntries = getInt(listing, "remainingEntries", -1);
+    Preconditions.checkState(remainingEntries != -1,
+        "remainingEntries was not set");
+    return new DirectoryListing(fileStatuses, remainingEntries);
+  }
+
   /** Convert a Json map to an ExtendedBlock object. */
   static ExtendedBlock toExtendedBlock(final Map<?, ?> m) {
     if (m == null) {
@@ -189,6 +224,15 @@ class JsonUtilClient {
     }
   }
 
+  static Map<?, ?> getMap(Map<?, ?> m, String key) {
+    Object map = m.get(key);
+    if (map instanceof Map<?, ?>) {
+      return (Map<?, ?>) map;
+    } else {
+      return null;
+    }
+  }
+
   /** Convert a Json map to an DatanodeInfo object. */
   static DatanodeInfo toDatanodeInfo(final Map<?, ?> m)
       throws IOException {
@@ -228,27 +272,26 @@ class JsonUtilClient {
     }
 
     // TODO: Fix storageID
-    return new DatanodeInfo(
-        ipAddr,
-        (String)m.get("hostName"),
-        (String)m.get("storageID"),
-        xferPort,
-        ((Number) m.get("infoPort")).intValue(),
-        getInt(m, "infoSecurePort", 0),
-        ((Number) m.get("ipcPort")).intValue(),
-
-        getLong(m, "capacity", 0l),
-        getLong(m, "dfsUsed", 0l),
-        getLong(m, "remaining", 0l),
-        getLong(m, "blockPoolUsed", 0l),
-        getLong(m, "cacheCapacity", 0l),
-        getLong(m, "cacheUsed", 0l),
-        getLong(m, "lastUpdate", 0l),
-        getLong(m, "lastUpdateMonotonic", 0l),
-        getInt(m, "xceiverCount", 0),
-        getString(m, "networkLocation", ""),
-        DatanodeInfo.AdminStates.valueOf(getString(m, "adminState", "NORMAL")),
-        getString(m, "upgradeDomain", ""));
+    return new DatanodeInfoBuilder().setIpAddr(ipAddr)
+        .setHostName((String) m.get("hostName"))
+        .setDatanodeUuid((String) m.get("storageID")).setXferPort(xferPort)
+        .setInfoPort(((Number) m.get("infoPort")).intValue())
+        .setInfoSecurePort(getInt(m, "infoSecurePort", 0))
+        .setIpcPort(((Number) m.get("ipcPort")).intValue())
+        .setCapacity(getLong(m, "capacity", 0L))
+        .setDfsUsed(getLong(m, "dfsUsed", 0L))
+        .setRemaining(getLong(m, "remaining", 0L))
+        .setBlockPoolUsed(getLong(m, "blockPoolUsed", 0L))
+        .setCacheCapacity(getLong(m, "cacheCapacity", 0L))
+        .setCacheUsed(getLong(m, "cacheUsed", 0L))
+        .setLastUpdate(getLong(m, "lastUpdate", 0L))
+        .setLastUpdateMonotonic(getLong(m, "lastUpdateMonotonic", 0L))
+        .setXceiverCount(getInt(m, "xceiverCount", 0))
+        .setNetworkLocation(getString(m, "networkLocation", "")).setAdminState(
+            DatanodeInfo.AdminStates
+                .valueOf(getString(m, "adminState", "NORMAL")))
+        .setUpgradeDomain(getString(m, "upgradeDomain", ""))
+        .build();
   }
 
   /** Convert an Object[] to a DatanodeInfo[]. */

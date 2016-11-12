@@ -25,9 +25,9 @@ import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.QuotaExceededException;
+import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
 
 import java.io.IOException;
-import java.util.Map;
 
 import static org.apache.hadoop.util.Time.now;
 
@@ -56,10 +56,10 @@ class FSDirSymlinkOp {
     INodesInPath iip;
     fsd.writeLock();
     try {
-      iip = fsd.resolvePathForWrite(pc, link, false);
+      iip = fsd.resolvePath(pc, link, DirOp.WRITE_LINK);
       link = iip.getPath();
       if (!createParent) {
-        fsd.verifyParentDir(iip, link);
+        fsd.verifyParentDir(iip);
       }
       if (!fsd.isValidToCreate(link, iip)) {
         throw new IOException(
@@ -99,21 +99,21 @@ class FSDirSymlinkOp {
       INodesInPath iip, String target, PermissionStatus dirPerms,
       boolean createParent, boolean logRetryCache) throws IOException {
     final long mtime = now();
-    final byte[] localName = iip.getLastLocalName();
+    final INodesInPath parent;
     if (createParent) {
-      Map.Entry<INodesInPath, String> e = FSDirMkdirOp
-          .createAncestorDirectories(fsd, iip, dirPerms);
-      if (e == null) {
+      parent = FSDirMkdirOp.createAncestorDirectories(fsd, iip, dirPerms);
+      if (parent == null) {
         return null;
       }
-      iip = INodesInPath.append(e.getKey(), null, localName);
+    } else {
+      parent = iip.getParentINodesInPath();
     }
     final String userName = dirPerms.getUserName();
     long id = fsd.allocateNewInodeId();
     PermissionStatus perm = new PermissionStatus(
         userName, null, FsPermission.getDefault());
-    INodeSymlink newNode = unprotectedAddSymlink(fsd, iip.getExistingINodes(),
-        localName, id, target, mtime, mtime, perm);
+    INodeSymlink newNode = unprotectedAddSymlink(fsd, parent,
+        iip.getLastLocalName(), id, target, mtime, mtime, perm);
     if (newNode == null) {
       NameNode.stateChangeLog.info("addSymlink: failed to add " + path);
       return null;

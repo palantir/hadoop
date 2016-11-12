@@ -505,7 +505,8 @@ public class TestClientRMService {
   @Test
   public void testForceKillApplication() throws Exception {
     YarnConfiguration conf = new YarnConfiguration();
-    MockRM rm = new MockRM();
+    conf.setBoolean(MockRM.ENABLE_WEBAPP, true);
+    MockRM rm = new MockRM(conf);
     rm.init(conf);
     rm.start();
 
@@ -521,6 +522,8 @@ public class TestClientRMService {
 
     KillApplicationRequest killRequest1 =
         KillApplicationRequest.newInstance(app1.getApplicationId());
+    String diagnostic = "message1";
+    killRequest1.setDiagnostics(diagnostic);
     KillApplicationRequest killRequest2 =
         KillApplicationRequest.newInstance(app2.getApplicationId());
 
@@ -538,6 +541,8 @@ public class TestClientRMService {
         killAttemptCount > 1);
     assertEquals("Incorrect number of apps in the RM", 1,
         rmService.getApplications(getRequest).getApplicationList().size());
+    assertTrue("Diagnostic message is incorrect",
+        app1.getDiagnostics().toString().contains(diagnostic));
 
     KillApplicationResponse killResponse2 =
         rmService.forceKillApplication(killRequest2);
@@ -1074,7 +1079,7 @@ public class TestClientRMService {
         rmContext.getScheduler().getSchedulerAppInfo(attemptId)
             .getLiveContainers()).thenReturn(rmContainers);
     ContainerStatus cs = mock(ContainerStatus.class);
-    when(containerimpl.getFinishedStatus()).thenReturn(cs);
+    when(containerimpl.completed()).thenReturn(false);
     when(containerimpl.getDiagnosticsInfo()).thenReturn("N/A");
     when(containerimpl.getContainerExitStatus()).thenReturn(0);
     when(containerimpl.getContainerState()).thenReturn(ContainerState.COMPLETE);
@@ -1625,6 +1630,25 @@ public class TestClientRMService {
   }
 
   @Test(timeout = 120000)
+  public void testUpdatePriorityAndKillAppWithZeroClusterResource()
+      throws Exception {
+    int maxPriority = 10;
+    int appPriority = 5;
+    YarnConfiguration conf = new YarnConfiguration();
+    conf.setInt(YarnConfiguration.MAX_CLUSTER_LEVEL_APPLICATION_PRIORITY,
+        maxPriority);
+    MockRM rm = new MockRM(conf);
+    rm.init(conf);
+    rm.start();
+    RMApp app1 = rm.submitApp(1024, Priority.newInstance(appPriority));
+    ClientRMService rmService = rm.getClientRMService();
+    testApplicationPriorityUpdation(rmService, app1, appPriority, appPriority);
+    rm.killApp(app1.getApplicationId());
+    rm.waitForState(app1.getApplicationId(), RMAppState.KILLED);
+    rm.stop();
+  }
+
+  @Test(timeout = 120000)
   public void testUpdateApplicationPriorityRequest() throws Exception {
     int maxPriority = 10;
     int appPriority = 5;
@@ -1634,7 +1658,7 @@ public class TestClientRMService {
     MockRM rm = new MockRM(conf);
     rm.init(conf);
     rm.start();
-
+    rm.registerNode("host1:1234", 1024);
     // Start app1 with appPriority 5
     RMApp app1 = rm.submitApp(1024, Priority.newInstance(appPriority));
 

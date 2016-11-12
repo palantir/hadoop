@@ -28,6 +28,7 @@ import org.apache.hadoop.crypto.key.KeyProviderCryptoExtension.CryptoExtension;
 import org.apache.hadoop.crypto.key.KeyProviderCryptoExtension.EncryptedKeyVersion;
 import org.apache.hadoop.crypto.key.KeyProviderDelegationTokenExtension;
 import org.apache.hadoop.crypto.key.kms.KMSClientProvider;
+import org.apache.hadoop.crypto.key.kms.KMSDelegationToken;
 import org.apache.hadoop.crypto.key.kms.LoadBalancingKMSClientProvider;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.Path;
@@ -145,11 +146,31 @@ public class TestKMS {
   }
 
   protected Configuration createBaseKMSConf(File keyStoreDir) throws Exception {
-    Configuration conf = new Configuration(false);
-    conf.set(KMSConfiguration.KEY_PROVIDER_URI,
+    return createBaseKMSConf(keyStoreDir, null);
+  }
+
+  /**
+   * The Configuration object is shared by both KMS client and server in unit
+   * tests because UGI gets/sets it to a static variable.
+   * As a workaround, make sure the client configurations are copied to server
+   * so that client can read them.
+   * @param keyStoreDir where keystore is located.
+   * @param conf KMS client configuration
+   * @return KMS server configuration based on client.
+   * @throws Exception
+   */
+  protected Configuration createBaseKMSConf(File keyStoreDir,
+      Configuration conf) throws Exception {
+    Configuration newConf;
+    if (conf == null) {
+      newConf = new Configuration(false);
+    } else {
+      newConf = new Configuration(conf);
+    }
+    newConf.set(KMSConfiguration.KEY_PROVIDER_URI,
         "jceks://file@" + new Path(keyStoreDir.getAbsolutePath(), "kms.keystore").toUri());
-    conf.set("hadoop.kms.authentication.type", "simple");
-    return conf;
+    newConf.set("hadoop.kms.authentication.type", "simple");
+    return newConf;
   }
 
   public static void writeConf(File confDir, Configuration conf)
@@ -278,9 +299,8 @@ public class TestKMS {
     if (kerberos) {
       conf.set("hadoop.security.authentication", "kerberos");
     }
-    UserGroupInformation.setConfiguration(conf);
     File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
 
     final String keystore;
     final String password;
@@ -402,9 +422,8 @@ public class TestKMS {
     final String specialKey = "key %^[\n{]}|\"<>\\";
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     File confDir = getTestDir();
-    conf = createBaseKMSConf(confDir);
+    conf = createBaseKMSConf(confDir, conf);
     conf.set(KeyAuthorizationKeyProvider.KEY_ACL + specialKey + ".ALL", "*");
     writeConf(confDir, conf);
 
@@ -437,9 +456,8 @@ public class TestKMS {
   public void testKMSProvider() throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     File confDir = getTestDir();
-    conf = createBaseKMSConf(confDir);
+    conf = createBaseKMSConf(confDir, conf);
     conf.set(KeyAuthorizationKeyProvider.KEY_ACL + "k1.ALL", "*");
     conf.set(KeyAuthorizationKeyProvider.KEY_ACL + "k2.MANAGEMENT", "*");
     conf.set(KeyAuthorizationKeyProvider.KEY_ACL + "k2.READ", "*");
@@ -697,9 +715,8 @@ public class TestKMS {
   public void testKeyACLs() throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     final File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     conf.set("hadoop.kms.authentication.type", "kerberos");
     conf.set("hadoop.kms.authentication.kerberos.keytab",
         keytab.getAbsolutePath());
@@ -975,9 +992,8 @@ public class TestKMS {
   public void doKMSRestart(boolean useKrb) throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     final File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     if (useKrb) {
       conf.set("hadoop.kms.authentication.type", "kerberos");
     }
@@ -1055,9 +1071,8 @@ public class TestKMS {
   public void testKMSAuthFailureRetry() throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     final File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     conf.set("hadoop.kms.authentication.kerberos.keytab",
         keytab.getAbsolutePath());
     conf.set("hadoop.kms.authentication.kerberos.principal", "HTTP/localhost");
@@ -1149,9 +1164,8 @@ public class TestKMS {
   public void testACLs() throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     final File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     conf.set("hadoop.kms.authentication.type", "kerberos");
     conf.set("hadoop.kms.authentication.kerberos.keytab",
         keytab.getAbsolutePath());
@@ -1459,9 +1473,8 @@ public class TestKMS {
   public void testKMSBlackList() throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     conf.set("hadoop.kms.authentication.type", "kerberos");
     conf.set("hadoop.kms.authentication.kerberos.keytab",
         keytab.getAbsolutePath());
@@ -1548,9 +1561,8 @@ public class TestKMS {
   public void testServicePrincipalACLs() throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     conf.set("hadoop.kms.authentication.type", "kerberos");
     conf.set("hadoop.kms.authentication.kerberos.keytab",
         keytab.getAbsolutePath());
@@ -1675,9 +1687,8 @@ public class TestKMS {
   public void testDelegationTokenAccess() throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     final File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     conf.set("hadoop.kms.authentication.type", "kerberos");
     conf.set("hadoop.kms.authentication.kerberos.keytab",
         keytab.getAbsolutePath());
@@ -1758,9 +1769,8 @@ public class TestKMS {
 
   private void testDelegationTokensOps(Configuration conf,
       final boolean useKrb) throws Exception {
-    UserGroupInformation.setConfiguration(conf);
     File confDir = getTestDir();
-    conf = createBaseKMSConf(confDir);
+    conf = createBaseKMSConf(confDir, conf);
     if (useKrb) {
       conf.set("hadoop.kms.authentication.type", "kerberos");
       conf.set("hadoop.kms.authentication.kerberos.keytab",
@@ -1794,13 +1804,13 @@ public class TestKMS {
             InetSocketAddress kmsAddr =
                 new InetSocketAddress(getKMSUrl().getHost(),
                     getKMSUrl().getPort());
-            Assert.assertEquals(KMSClientProvider.TOKEN_KIND,
+            Assert.assertEquals(KMSDelegationToken.TOKEN_KIND,
                 credentials.getToken(SecurityUtil.buildTokenService(kmsAddr)).
                     getKind());
 
             // Test non-renewer user cannot renew.
             for (Token<?> token : tokens) {
-              if (!(token.getKind().equals(KMSClientProvider.TOKEN_KIND))) {
+              if (!(token.getKind().equals(KMSDelegationToken.TOKEN_KIND))) {
                 LOG.info("Skipping token {}", token);
                 continue;
               }
@@ -1823,6 +1833,7 @@ public class TestKMS {
             } else {
               otherUgi = UserGroupInformation.createUserForTesting("client1",
                   new String[] {"other group"});
+              UserGroupInformation.setLoginUser(otherUgi);
             }
             try {
               // test delegation token renewal via renewer
@@ -1832,7 +1843,7 @@ public class TestKMS {
                   boolean renewed = false;
                   for (Token<?> token : tokens) {
                     if (!(token.getKind()
-                        .equals(KMSClientProvider.TOKEN_KIND))) {
+                        .equals(KMSDelegationToken.TOKEN_KIND))) {
                       LOG.info("Skipping token {}", token);
                       continue;
                     }
@@ -1852,7 +1863,7 @@ public class TestKMS {
                   // test delegation token cancellation
                   for (Token<?> token : tokens) {
                     if (!(token.getKind()
-                        .equals(KMSClientProvider.TOKEN_KIND))) {
+                        .equals(KMSDelegationToken.TOKEN_KIND))) {
                       LOG.info("Skipping token {}", token);
                       continue;
                     }
@@ -1884,9 +1895,8 @@ public class TestKMS {
   @Test
   public void testDelegationTokensUpdatedInUGI() throws Exception {
     Configuration conf = new Configuration();
-    UserGroupInformation.setConfiguration(conf);
     File confDir = getTestDir();
-    conf = createBaseKMSConf(confDir);
+    conf = createBaseKMSConf(confDir, conf);
     conf.set(
         "hadoop.kms.authentication.delegation-token.max-lifetime.sec", "5");
     conf.set(
@@ -1917,7 +1927,7 @@ public class TestKMS {
             final Credentials credentials = new Credentials();
             kpdte.addDelegationTokens("client", credentials);
             Assert.assertEquals(1, credentials.getAllTokens().size());
-            Assert.assertEquals(KMSClientProvider.TOKEN_KIND, credentials.
+            Assert.assertEquals(KMSDelegationToken.TOKEN_KIND, credentials.
                 getToken(SecurityUtil.buildTokenService(kmsAddr)).getKind());
             UserGroupInformation.getCurrentUser().addCredentials(credentials);
             LOG.info("Added kms dt to credentials: {}", UserGroupInformation.
@@ -1961,14 +1971,14 @@ public class TestKMS {
             final Credentials newCreds = new Credentials();
             kpdte.addDelegationTokens("client", newCreds);
             Assert.assertEquals(1, newCreds.getAllTokens().size());
-            Assert.assertEquals(KMSClientProvider.TOKEN_KIND,
+            Assert.assertEquals(KMSDelegationToken.TOKEN_KIND,
                 newCreds.getToken(SecurityUtil.buildTokenService(kmsAddr)).
                     getKind());
 
             // Using job 1's DT should fail.
             final Credentials oldCreds = new Credentials();
             for (Token<?> token : job1Token) {
-              if (token.getKind().equals(KMSClientProvider.TOKEN_KIND)) {
+              if (token.getKind().equals(KMSDelegationToken.TOKEN_KIND)) {
                 oldCreds
                     .addToken(SecurityUtil.buildTokenService(kmsAddr), token);
               }
@@ -1985,7 +1995,7 @@ public class TestKMS {
 
             // Using the new DT should succeed.
             Assert.assertEquals(1, newCreds.getAllTokens().size());
-            Assert.assertEquals(KMSClientProvider.TOKEN_KIND,
+            Assert.assertEquals(KMSDelegationToken.TOKEN_KIND,
                 newCreds.getToken(SecurityUtil.buildTokenService(kmsAddr)).
                     getKind());
             UserGroupInformation.getCurrentUser().addCredentials(newCreds);
@@ -2023,9 +2033,8 @@ public class TestKMS {
 
       Configuration conf = new Configuration();
       conf.set("hadoop.security.authentication", "kerberos");
-      UserGroupInformation.setConfiguration(conf);
       final File testDir = getTestDir();
-      conf = createBaseKMSConf(testDir);
+      conf = createBaseKMSConf(testDir, conf);
       conf.set("hadoop.kms.authentication.type", "kerberos");
       conf.set("hadoop.kms.authentication.kerberos.keytab", keytab.getAbsolutePath());
       conf.set("hadoop.kms.authentication.kerberos.principal", "HTTP/localhost");
@@ -2113,9 +2122,8 @@ public class TestKMS {
   public void doProxyUserTest(final boolean kerberos) throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     final File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     if (kerberos) {
       conf.set("hadoop.kms.authentication.type", "kerberos");
     }
@@ -2146,6 +2154,7 @@ public class TestKMS {
               loginUserFromKeytabAndReturnUGI("client", keytab.getAbsolutePath());
         } else {
           proxyUgi = UserGroupInformation.createRemoteUser("client");
+          UserGroupInformation.setLoginUser(proxyUgi);
         }
 
         final UserGroupInformation clientUgi = proxyUgi; 
@@ -2218,9 +2227,8 @@ public class TestKMS {
   public void doWebHDFSProxyUserTest(final boolean kerberos) throws Exception {
     Configuration conf = new Configuration();
     conf.set("hadoop.security.authentication", "kerberos");
-    UserGroupInformation.setConfiguration(conf);
     final File testDir = getTestDir();
-    conf = createBaseKMSConf(testDir);
+    conf = createBaseKMSConf(testDir, conf);
     if (kerberos) {
       conf.set("hadoop.kms.authentication.type", "kerberos");
     }

@@ -197,7 +197,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
   private class CapTestServletModule extends TestServletModule {
     @Override
     public void configureScheduler() {
-      conf.set("yarn.resourcemanager.scheduler.class",
+      conf.set(YarnConfiguration.RM_SCHEDULER,
           CapacityScheduler.class.getName());
     }
   }
@@ -223,8 +223,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
       } catch(IOException e) {
       }
       conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, FS_ALLOC_FILE);
-      conf.set("yarn.resourcemanager.scheduler.class",
-          FairScheduler.class.getName());
+      conf.set(YarnConfiguration.RM_SCHEDULER, FairScheduler.class.getName());
     }
   }
 
@@ -367,6 +366,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
         { MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML };
     MediaType[] contentTypes =
         { MediaType.APPLICATION_JSON_TYPE, MediaType.APPLICATION_XML_TYPE };
+    String diagnostic = "message1";
     for (String mediaType : mediaTypes) {
       for (MediaType contentType : contentTypes) {
         RMApp app = rm.submitApp(CONTAINER_MB, "", webserviceUserName);
@@ -374,6 +374,7 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
 
         AppState targetState =
             new AppState(YarnApplicationState.KILLED.toString());
+        targetState.setDiagnostics(diagnostic);
 
         Object entity;
         if (contentType.equals(MediaType.APPLICATION_JSON_TYPE)) {
@@ -428,6 +429,8 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
             } else {
               verifyAppStateXML(response, RMAppState.KILLED);
             }
+            assertTrue("Diagnostic message is incorrect",
+                app.getDiagnostics().toString().contains(diagnostic));
             break;
           }
         }

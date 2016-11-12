@@ -30,6 +30,7 @@ import org.apache.hadoop.hdfs.XAttrHelper;
 import org.apache.hadoop.hdfs.protocol.HdfsFileStatus;
 import org.apache.hadoop.hdfs.protocol.proto.HdfsProtos;
 import org.apache.hadoop.hdfs.protocolPB.PBHelperClient;
+import org.apache.hadoop.hdfs.server.namenode.FSDirectory.DirOp;
 import org.apache.hadoop.security.AccessControlException;
 
 import java.io.FileNotFoundException;
@@ -72,10 +73,10 @@ class FSDirXAttrOp {
     INodesInPath iip;
     fsd.writeLock();
     try {
-      iip = fsd.resolvePathForWrite(pc, src);
+      iip = fsd.resolvePath(pc, src, DirOp.WRITE);
       src = iip.getPath();
       checkXAttrChangeAccess(fsd, iip, xAttr, pc);
-      unprotectedSetXAttrs(fsd, src, xAttrs, flag);
+      unprotectedSetXAttrs(fsd, iip, xAttrs, flag);
     } finally {
       fsd.writeUnlock();
     }
@@ -94,7 +95,7 @@ class FSDirXAttrOp {
     if (!getAll) {
       XAttrPermissionFilter.checkPermissionForApi(pc, xAttrs, isRawPath);
     }
-    final INodesInPath iip = fsd.resolvePath(pc, src);
+    final INodesInPath iip = fsd.resolvePath(pc, src, DirOp.READ);
     if (fsd.isPermissionEnabled()) {
       fsd.checkPathAccess(pc, iip, FsAction.READ);
     }
@@ -133,7 +134,7 @@ class FSDirXAttrOp {
     FSDirXAttrOp.checkXAttrsConfigFlag(fsd);
     final FSPermissionChecker pc = fsd.getPermissionChecker();
     final boolean isRawPath = FSDirectory.isReservedRawName(src);
-    final INodesInPath iip = fsd.resolvePath(pc, src);
+    final INodesInPath iip = fsd.resolvePath(pc, src, DirOp.READ);
     if (fsd.isPermissionEnabled()) {
       /* To access xattr names, you need EXECUTE in the owning directory. */
       fsd.checkParentAccess(pc, iip, FsAction.EXECUTE);
@@ -165,7 +166,7 @@ class FSDirXAttrOp {
     INodesInPath iip;
     fsd.writeLock();
     try {
-      iip = fsd.resolvePathForWrite(pc, src);
+      iip = fsd.resolvePath(pc, src, DirOp.WRITE);
       src = iip.getPath();
       checkXAttrChangeAccess(fsd, iip, xAttr, pc);
 
@@ -186,8 +187,7 @@ class FSDirXAttrOp {
       FSDirectory fsd, final String src, final List<XAttr> toRemove)
       throws IOException {
     assert fsd.hasWriteLock();
-    INodesInPath iip = fsd.getINodesInPath4Write(
-        FSDirectory.normalizePath(src), true);
+    INodesInPath iip = fsd.getINodesInPath(src, DirOp.WRITE);
     INode inode = FSDirectory.resolveLastINode(iip);
     int snapshotId = iip.getLatestSnapshotId();
     List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
@@ -253,14 +253,11 @@ class FSDirXAttrOp {
   }
 
   static INode unprotectedSetXAttrs(
-      FSDirectory fsd, final String src, final List<XAttr> xAttrs,
+      FSDirectory fsd, final INodesInPath iip, final List<XAttr> xAttrs,
       final EnumSet<XAttrSetFlag> flag)
       throws IOException {
     assert fsd.hasWriteLock();
-    INodesInPath iip = fsd.getINodesInPath4Write(FSDirectory.normalizePath(src),
-        true);
     INode inode = FSDirectory.resolveLastINode(iip);
-    int snapshotId = iip.getLatestSnapshotId();
     List<XAttr> existingXAttrs = XAttrStorage.readINodeXAttrs(inode);
     List<XAttr> newXAttrs = setINodeXAttrs(fsd, existingXAttrs, xAttrs, flag);
     final boolean isFile = inode.isFile();
@@ -287,7 +284,7 @@ class FSDirXAttrOp {
       }
     }
 
-    XAttrStorage.updateINodeXAttrs(inode, newXAttrs, snapshotId);
+    XAttrStorage.updateINodeXAttrs(inode, newXAttrs, iip.getLatestSnapshotId());
     return inode;
   }
 
@@ -361,22 +358,20 @@ class FSDirXAttrOp {
     return xAttrs;
   }
 
-  static XAttr getXAttrByPrefixedName(FSDirectory fsd, INode inode,
-      int snapshotId, String prefixedName) throws IOException {
+  static XAttr getXAttrByPrefixedName(FSDirectory fsd, INodesInPath iip,
+      String prefixedName) throws IOException {
     fsd.readLock();
     try {
-      return XAttrStorage.readINodeXAttrByPrefixedName(inode, snapshotId,
-          prefixedName);
+      return XAttrStorage.readINodeXAttrByPrefixedName(iip, prefixedName);
     } finally {
       fsd.readUnlock();
     }
   }
 
   static XAttr unprotectedGetXAttrByPrefixedName(
-      INode inode, int snapshotId, String prefixedName)
+      INodesInPath iip, String prefixedName)
       throws IOException {
-    return XAttrStorage.readINodeXAttrByPrefixedName(inode, snapshotId,
-        prefixedName);
+    return XAttrStorage.readINodeXAttrByPrefixedName(iip, prefixedName);
   }
 
   private static void checkXAttrChangeAccess(
@@ -429,11 +424,7 @@ class FSDirXAttrOp {
       throws IOException {
     fsd.readLock();
     try {
-      String src = iip.getPath();
-      INode inode = FSDirectory.resolveLastINode(iip);
-      int snapshotId = iip.getPathSnapshotId();
-      return XAttrStorage.readINodeXAttrs(fsd.getAttributes(src,
-              inode.getLocalNameBytes(), inode, snapshotId));
+      return XAttrStorage.readINodeXAttrs(fsd.getAttributes(iip));
     } finally {
       fsd.readUnlock();
     }

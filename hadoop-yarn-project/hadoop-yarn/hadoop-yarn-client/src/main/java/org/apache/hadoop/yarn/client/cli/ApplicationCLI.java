@@ -67,15 +67,18 @@ public class ApplicationCLI extends YarnCLI {
   private static final String APPLICATION_ATTEMPTS_PATTERN =
     "%30s\t%20s\t%35s\t%35s"
       + System.getProperty("line.separator");
-  private static final String CONTAINER_PATTERN = 
-    "%30s\t%20s\t%20s\t%20s\t%20s\t%20s\t%35s"
-      + System.getProperty("line.separator");
 
   private static final String APP_TYPE_CMD = "appTypes";
   private static final String APP_STATE_CMD = "appStates";
   private static final String APP_TAG_CMD = "appTags";
   private static final String ALLSTATES_OPTION = "ALL";
   private static final String QUEUE_CMD = "queue";
+
+  @VisibleForTesting
+  protected static final String CONTAINER_PATTERN =
+    "%30s\t%20s\t%20s\t%20s\t%20s\t%20s\t%35s"
+      + System.getProperty("line.separator");
+
   public static final String APPLICATION = "application";
   public static final String APPLICATION_ATTEMPT = "applicationattempt";
   public static final String CONTAINER = "container";
@@ -655,7 +658,14 @@ public class ApplicationCLI extends YarnCLI {
         //completed app report in the timeline server doesn't have usage report
         appReportStr.print(usageReport.getMemorySeconds() + " MB-seconds, ");
         appReportStr.println(usageReport.getVcoreSeconds() + " vcore-seconds");
+        appReportStr.print("\tAggregate Resource Preempted : ");
+        appReportStr.print(usageReport.getPreemptedMemorySeconds() +
+            " MB-seconds, ");
+        appReportStr.println(usageReport.getPreemptedVcoreSeconds() +
+            " vcore-seconds");
       } else {
+        appReportStr.println("N/A");
+        appReportStr.print("\tAggregate Resource Preempted : ");
         appReportStr.println("N/A");
       }
       appReportStr.print("\tLog Aggregation Status : ");

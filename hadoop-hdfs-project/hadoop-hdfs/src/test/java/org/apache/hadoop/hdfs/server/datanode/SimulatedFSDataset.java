@@ -62,6 +62,7 @@ import org.apache.hadoop.hdfs.server.protocol.VolumeFailureSummary;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.metrics2.MetricsCollector;
 import org.apache.hadoop.metrics2.util.MBeans;
+import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.DataChecksum;
 
 /**
@@ -113,6 +114,8 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
       "dfs.datanode.simulateddatastorage.state";
   private static final DatanodeStorage.State DEFAULT_STATE =
       DatanodeStorage.State.NORMAL;
+
+  private final AutoCloseableLock datasetLock;
   
   static final byte[] nullCrcFileData;
   static {
@@ -437,7 +440,7 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
     synchronized StorageReport getStorageReport(String bpid) {
       return new StorageReport(dnStorage,
           false, getCapacity(), getUsed(), getFree(),
-          map.get(bpid).getUsed());
+          map.get(bpid).getUsed(), 0L);
     }
   }
   
@@ -550,6 +553,7 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
         conf.getLong(CONFIG_PROPERTY_CAPACITY, DEFAULT_CAPACITY),
         conf.getEnum(CONFIG_PROPERTY_STATE, DEFAULT_STATE));
     this.volume = new SimulatedVolume(this.storage);
+    this.datasetLock = new AutoCloseableLock();
   }
 
   public synchronized void injectBlocks(String bpid,
@@ -1308,11 +1312,6 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   }
 
   @Override
-  public List<FinalizedReplica> getFinalizedBlocksOnPersistentStorage(String bpid) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
   public Map<String, Object> getVolumeInfoMap() {
     throw new UnsupportedOperationException();
   }
@@ -1364,6 +1363,11 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
   @Override
   public boolean isDeletingBlock(String bpid, long blockId) {
     throw new UnsupportedOperationException();
+  }
+
+  @Override
+  public AutoCloseableLock acquireDatasetLock() {
+    return datasetLock.acquire();
   }
 }
 

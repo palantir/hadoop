@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,6 +19,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import java.io.IOException;
+import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.HashMap;
@@ -33,33 +34,45 @@ import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.AccessControlList;
 import org.apache.hadoop.security.authorize.ProxyUsers;
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
+import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
 import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.ContainerResourceChangeRequest;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceBlacklistRequest;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.UpdateContainerError;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.api.records.YarnApplicationAttemptState;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.InvalidContainerReleaseException;
-import org.apache.hadoop.yarn.exceptions.InvalidResourceBlacklistRequestException;
+import org.apache.hadoop.yarn.exceptions
+    .InvalidResourceBlacklistRequestException;
 import org.apache.hadoop.yarn.exceptions.InvalidResourceRequestException;
+import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
+import org.apache.hadoop.yarn.factories.RecordFactory;
+import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
 import org.apache.hadoop.yarn.security.YarnAuthorizationProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptState;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt
+    .RMAppAttemptState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler
+    .ResourceScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler
     .SchedContainerChangeRequest;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
+import org.apache.hadoop.yarn.util.Clock;
+import org.apache.hadoop.yarn.util.SystemClock;
+import org.apache.hadoop.yarn.util.Times;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
@@ -67,6 +80,20 @@ import org.apache.hadoop.yarn.util.resource.Resources;
  * Utility methods to aid serving RM data through the REST and RPC APIs
  */
 public class RMServerUtils {
+
+  private static final String UPDATE_OUTSTANDING_ERROR =
+      "UPDATE_OUTSTANDING_ERROR";
+  private static final String INCORRECT_CONTAINER_VERSION_ERROR =
+      "INCORRECT_CONTAINER_VERSION_ERROR";
+  private static final String INVALID_CONTAINER_ID =
+      "INVALID_CONTAINER_ID";
+  private static final String RESOURCE_OUTSIDE_ALLOWED_RANGE =
+      "RESOURCE_OUTSIDE_ALLOWED_RANGE";
+
+  protected static final RecordFactory RECORD_FACTORY =
+      RecordFactoryProvider.getRecordFactory(null);
+
+  private static Clock clock = SystemClock.getInstance();
 
   public static List<RMNode> queryRMNodes(RMContext context,
       EnumSet<NodeState> acceptedStates) {
@@ -97,6 +124,78 @@ public class RMServerUtils {
   }
 
   /**
+   * Check if we have:
+   * - Request for same containerId and different target resource
+   * - If targetResources violates maximum/minimumAllocation
+   * @param rmContext RM context
+   * @param request Allocate Request
+   * @param maximumAllocation Maximum Allocation
+   * @param increaseResourceReqs Increase Resource Request
+   * @param decreaseResourceReqs Decrease Resource Request
+   * @return List of container Errors
+   */
+  public static List<UpdateContainerError>
+      validateAndSplitUpdateResourceRequests(RMContext rmContext,
+      AllocateRequest request, Resource maximumAllocation,
+      List<UpdateContainerRequest> increaseResourceReqs,
+      List<UpdateContainerRequest> decreaseResourceReqs) {
+    List<UpdateContainerError> errors = new ArrayList<>();
+    Set<ContainerId> outstandingUpdate = new HashSet<>();
+    for (UpdateContainerRequest updateReq : request.getUpdateRequests()) {
+      RMContainer rmContainer = rmContext.getScheduler().getRMContainer(
+          updateReq.getContainerId());
+      String msg = null;
+      if (rmContainer == null) {
+        msg = INVALID_CONTAINER_ID;
+      }
+      // Only allow updates if the requested version matches the current
+      // version
+      if (msg == null && updateReq.getContainerVersion() !=
+          rmContainer.getContainer().getVersion()) {
+        msg = INCORRECT_CONTAINER_VERSION_ERROR + "|"
+            + updateReq.getContainerVersion() + "|"
+            + rmContainer.getContainer().getVersion();
+      }
+      // No more than 1 container update per request.
+      if (msg == null &&
+          outstandingUpdate.contains(updateReq.getContainerId())) {
+        msg = UPDATE_OUTSTANDING_ERROR;
+      }
+      if (msg == null) {
+        Resource original = rmContainer.getContainer().getResource();
+        Resource target = updateReq.getCapability();
+        if (Resources.fitsIn(target, original)) {
+          // This is a decrease request
+          if (validateIncreaseDecreaseRequest(rmContext, updateReq,
+              maximumAllocation, false)) {
+            decreaseResourceReqs.add(updateReq);
+            outstandingUpdate.add(updateReq.getContainerId());
+          } else {
+            msg = RESOURCE_OUTSIDE_ALLOWED_RANGE;
+          }
+        } else {
+          // This is an increase request
+          if (validateIncreaseDecreaseRequest(rmContext, updateReq,
+              maximumAllocation, true)) {
+            increaseResourceReqs.add(updateReq);
+            outstandingUpdate.add(updateReq.getContainerId());
+          } else {
+            msg = RESOURCE_OUTSIDE_ALLOWED_RANGE;
+          }
+        }
+      }
+      if (msg != null) {
+        UpdateContainerError updateError = RECORD_FACTORY
+            .newRecordInstance(UpdateContainerError.class);
+        updateError.setReason(msg);
+        updateError.setUpdateContainerRequest(updateReq);
+        errors.add(updateError);
+      }
+    }
+    return errors;
+  }
+
+  /**
    * Utility method to validate a list resource requests, by insuring that the
    * requested memory/vcore is non-negative and not greater than max
    */
@@ -118,12 +217,7 @@ public class RMServerUtils {
   }
 
   /**
-   * Validate increase/decrease request. This function must be called under
-   * the queue lock to make sure that the access to container resource is
-   * atomic. Refer to LeafQueue.decreaseContainer() and
-   * CapacityScheduelr.updateIncreaseRequests()
-   *
-   * 
+   * Validate increase/decrease request.
    * <pre>
    * - Throw exception when any other error happens
    * </pre>
@@ -145,7 +239,7 @@ public class RMServerUtils {
     if (increase) {
       if (originalResource.getMemorySize() > targetResource.getMemorySize()
           || originalResource.getVirtualCores() > targetResource
-              .getVirtualCores()) {
+          .getVirtualCores()) {
         String msg =
             "Trying to increase a container, but target resource has some"
                 + " resource < original resource, target=" + targetResource
@@ -156,7 +250,7 @@ public class RMServerUtils {
     } else {
       if (originalResource.getMemorySize() < targetResource.getMemorySize()
           || originalResource.getVirtualCores() < targetResource
-              .getVirtualCores()) {
+          .getVirtualCores()) {
         String msg =
             "Trying to decrease a container, but target resource has "
                 + "some resource > original resource, target=" + targetResource
@@ -194,112 +288,46 @@ public class RMServerUtils {
       }
     }
   }
-  
-  /**
-   * Check if we have:
-   * - Request for same containerId and different target resource
-   * - If targetResources violates maximum/minimumAllocation
-   */
-  public static void increaseDecreaseRequestSanityCheck(RMContext rmContext,
-      List<ContainerResourceChangeRequest> incRequests,
-      List<ContainerResourceChangeRequest> decRequests,
-      Resource maximumAllocation) throws InvalidResourceRequestException {
-    checkDuplicatedIncreaseDecreaseRequest(incRequests, decRequests);
-    validateIncreaseDecreaseRequest(rmContext, incRequests, maximumAllocation,
-        true);
-    validateIncreaseDecreaseRequest(rmContext, decRequests, maximumAllocation,
-        false);
-  }
-  
-  private static void checkDuplicatedIncreaseDecreaseRequest(
-      List<ContainerResourceChangeRequest> incRequests,
-      List<ContainerResourceChangeRequest> decRequests)
-          throws InvalidResourceRequestException {
-    String msg = "There're multiple increase or decrease container requests "
-        + "for same containerId=";
-    Set<ContainerId> existedContainerIds = new HashSet<ContainerId>();
-    if (incRequests != null) {
-      for (ContainerResourceChangeRequest r : incRequests) {
-        if (!existedContainerIds.add(r.getContainerId())) {
-          throw new InvalidResourceRequestException(msg + r.getContainerId());
-        }
-      }
-    }
-    
-    if (decRequests != null) {
-      for (ContainerResourceChangeRequest r : decRequests) {
-        if (!existedContainerIds.add(r.getContainerId())) {
-          throw new InvalidResourceRequestException(msg + r.getContainerId());
-        }
-      }
-    }
-  }
 
   // Sanity check and normalize target resource
-  private static void validateIncreaseDecreaseRequest(RMContext rmContext,
-      List<ContainerResourceChangeRequest> requests, Resource maximumAllocation,
-      boolean increase)
-      throws InvalidResourceRequestException {
-    if (requests == null) {
-      return;
+  private static boolean validateIncreaseDecreaseRequest(RMContext rmContext,
+      UpdateContainerRequest request, Resource maximumAllocation,
+      boolean increase) {
+    if (request.getCapability().getMemorySize() < 0
+        || request.getCapability().getMemorySize() > maximumAllocation
+        .getMemorySize()) {
+      return false;
     }
-    for (ContainerResourceChangeRequest request : requests) {
-      if (request.getCapability().getMemorySize() < 0
-          || request.getCapability().getMemorySize() > maximumAllocation
-              .getMemorySize()) {
-        throw new InvalidResourceRequestException("Invalid "
-            + (increase ? "increase" : "decrease") + " request"
-            + ", requested memory < 0"
-            + ", or requested memory > max configured" + ", requestedMemory="
-            + request.getCapability().getMemorySize() + ", maxMemory="
-            + maximumAllocation.getMemorySize());
-      }
-      if (request.getCapability().getVirtualCores() < 0
-          || request.getCapability().getVirtualCores() > maximumAllocation
-              .getVirtualCores()) {
-        throw new InvalidResourceRequestException("Invalid "
-            + (increase ? "increase" : "decrease") + " request"
-            + ", requested virtual cores < 0"
-            + ", or requested virtual cores > max configured"
-            + ", requestedVirtualCores="
-            + request.getCapability().getVirtualCores() + ", maxVirtualCores="
-            + maximumAllocation.getVirtualCores());
-      }
-      ContainerId containerId = request.getContainerId();
-      ResourceScheduler scheduler = rmContext.getScheduler();
-      RMContainer rmContainer = scheduler.getRMContainer(containerId);
-      if (null == rmContainer) {
-        String msg =
-            "Failed to get rmContainer for "
-                + (increase ? "increase" : "decrease")
-                + " request, with container-id=" + containerId;
-        throw new InvalidResourceRequestException(msg);
-      }
-      ResourceCalculator rc = scheduler.getResourceCalculator();
-      Resource targetResource = Resources.normalize(rc, request.getCapability(),
-          scheduler.getMinimumResourceCapability(),
-          scheduler.getMaximumResourceCapability(),
-          scheduler.getMinimumResourceCapability());
-      // Update normalized target resource
-      request.setCapability(targetResource);
+    if (request.getCapability().getVirtualCores() < 0
+        || request.getCapability().getVirtualCores() > maximumAllocation
+        .getVirtualCores()) {
+      return false;
     }
+    ResourceScheduler scheduler = rmContext.getScheduler();
+    ResourceCalculator rc = scheduler.getResourceCalculator();
+    Resource targetResource = Resources.normalize(rc, request.getCapability(),
+        scheduler.getMinimumResourceCapability(),
+        scheduler.getMaximumResourceCapability(),
+        scheduler.getMinimumResourceCapability());
+    // Update normalized target resource
+    request.setCapability(targetResource);
+    return true;
   }
 
   /**
    * It will validate to make sure all the containers belong to correct
    * application attempt id. If not then it will throw
    * {@link InvalidContainerReleaseException}
-   * 
-   * @param containerReleaseList
-   *          containers to be released as requested by application master.
-   * @param appAttemptId
-   *          Application attempt Id
+   *
+   * @param containerReleaseList containers to be released as requested by
+   *                             application master.
+   * @param appAttemptId         Application attempt Id
    * @throws InvalidContainerReleaseException
    */
   public static void
       validateContainerReleaseRequest(List<ContainerId> containerReleaseList,
-          ApplicationAttemptId appAttemptId)
-          throws InvalidContainerReleaseException {
+      ApplicationAttemptId appAttemptId)
+      throws InvalidContainerReleaseException {
     for (ContainerId cId : containerReleaseList) {
       if (!appAttemptId.equals(cId.getApplicationAttemptId())) {
         throw new InvalidContainerReleaseException(
@@ -321,10 +349,11 @@ public class RMServerUtils {
   /**
    * Utility method to verify if the current user has access based on the
    * passed {@link AccessControlList}
+   *
    * @param authorizer the {@link AccessControlList} to check against
-   * @param method the method name to be logged
-   * @param module like AdminService or NodeLabelManager
-   * @param LOG the logger to use
+   * @param method     the method name to be logged
+   * @param module     like AdminService or NodeLabelManager
+   * @param LOG        the logger to use
    * @return {@link UserGroupInformation} of the current user
    * @throws IOException
    */
@@ -347,11 +376,11 @@ public class RMServerUtils {
           " to call '" + method + "'");
 
       RMAuditLogger.logFailure(user.getShortUserName(), method, "", module,
-        RMAuditLogger.AuditConstants.UNAUTHORIZED_USER);
+          RMAuditLogger.AuditConstants.UNAUTHORIZED_USER);
 
       throw new AccessControlException("User " + user.getShortUserName() +
-              " doesn't have permission" +
-              " to call '" + method + "'");
+          " doesn't have permission" +
+          " to call '" + method + "'");
     }
     if (LOG.isTraceEnabled()) {
       LOG.trace(method + " invoked by user " + user.getShortUserName());
@@ -362,56 +391,57 @@ public class RMServerUtils {
   public static YarnApplicationState createApplicationState(
       RMAppState rmAppState) {
     switch (rmAppState) {
-      case NEW:
-        return YarnApplicationState.NEW;
-      case NEW_SAVING:
-        return YarnApplicationState.NEW_SAVING;
-      case SUBMITTED:
-        return YarnApplicationState.SUBMITTED;
-      case ACCEPTED:
-        return YarnApplicationState.ACCEPTED;
-      case RUNNING:
-        return YarnApplicationState.RUNNING;
-      case FINISHING:
-      case FINISHED:
-        return YarnApplicationState.FINISHED;
-      case KILLED:
-        return YarnApplicationState.KILLED;
-      case FAILED:
-        return YarnApplicationState.FAILED;
-      default:
-        throw new YarnRuntimeException("Unknown state passed!");
-      }
+    case NEW:
+      return YarnApplicationState.NEW;
+    case NEW_SAVING:
+      return YarnApplicationState.NEW_SAVING;
+    case SUBMITTED:
+      return YarnApplicationState.SUBMITTED;
+    case ACCEPTED:
+      return YarnApplicationState.ACCEPTED;
+    case RUNNING:
+      return YarnApplicationState.RUNNING;
+    case FINISHING:
+    case FINISHED:
+      return YarnApplicationState.FINISHED;
+    case KILLING:
+    case KILLED:
+      return YarnApplicationState.KILLED;
+    case FAILED:
+      return YarnApplicationState.FAILED;
+    default:
+      throw new YarnRuntimeException("Unknown state passed!");
+    }
   }
 
   public static YarnApplicationAttemptState createApplicationAttemptState(
       RMAppAttemptState rmAppAttemptState) {
     switch (rmAppAttemptState) {
-      case NEW:
-        return YarnApplicationAttemptState.NEW;
-      case SUBMITTED:
-        return YarnApplicationAttemptState.SUBMITTED;
-      case SCHEDULED:
-        return YarnApplicationAttemptState.SCHEDULED;
-      case ALLOCATED:
-        return YarnApplicationAttemptState.ALLOCATED;
-      case LAUNCHED:
-        return YarnApplicationAttemptState.LAUNCHED;
-      case ALLOCATED_SAVING:
-      case LAUNCHED_UNMANAGED_SAVING:
-        return YarnApplicationAttemptState.ALLOCATED_SAVING;
-      case RUNNING:
-        return YarnApplicationAttemptState.RUNNING;
-      case FINISHING:
-        return YarnApplicationAttemptState.FINISHING;
-      case FINISHED:
-        return YarnApplicationAttemptState.FINISHED;
-      case KILLED:
-        return YarnApplicationAttemptState.KILLED;
-      case FAILED:
-        return YarnApplicationAttemptState.FAILED;
-      default:
-        throw new YarnRuntimeException("Unknown state passed!");
+    case NEW:
+      return YarnApplicationAttemptState.NEW;
+    case SUBMITTED:
+      return YarnApplicationAttemptState.SUBMITTED;
+    case SCHEDULED:
+      return YarnApplicationAttemptState.SCHEDULED;
+    case ALLOCATED:
+      return YarnApplicationAttemptState.ALLOCATED;
+    case LAUNCHED:
+      return YarnApplicationAttemptState.LAUNCHED;
+    case ALLOCATED_SAVING:
+    case LAUNCHED_UNMANAGED_SAVING:
+      return YarnApplicationAttemptState.ALLOCATED_SAVING;
+    case RUNNING:
+      return YarnApplicationAttemptState.RUNNING;
+    case FINISHING:
+      return YarnApplicationAttemptState.FINISHING;
+    case FINISHED:
+      return YarnApplicationAttemptState.FINISHED;
+    case KILLED:
+      return YarnApplicationAttemptState.KILLED;
+    case FAILED:
+      return YarnApplicationAttemptState.FAILED;
+    default:
+      throw new YarnRuntimeException("Unknown state passed!");
     }
   }
 
@@ -420,11 +450,10 @@ public class RMServerUtils {
    * a return value when a valid report cannot be found.
    */
   public static final ApplicationResourceUsageReport
-    DUMMY_APPLICATION_RESOURCE_USAGE_REPORT =
+      DUMMY_APPLICATION_RESOURCE_USAGE_REPORT =
       BuilderUtils.newApplicationResourceUsageReport(-1, -1,
           Resources.createResource(-1, -1), Resources.createResource(-1, -1),
-          Resources.createResource(-1, -1), 0, 0);
-
+          Resources.createResource(-1, -1), 0, 0, 0, 0);
 
 
   /**
@@ -438,12 +467,66 @@ public class RMServerUtils {
       String propName = entry.getKey();
       if (propName.startsWith(YarnConfiguration.RM_PROXY_USER_PREFIX)) {
         rmProxyUsers.put(ProxyUsers.CONF_HADOOP_PROXYUSER + "." +
-            propName.substring(YarnConfiguration.RM_PROXY_USER_PREFIX.length()),
+                propName.substring(YarnConfiguration.RM_PROXY_USER_PREFIX
+                    .length()),
             entry.getValue());
       }
     }
     for (Map.Entry<String, String> entry : rmProxyUsers.entrySet()) {
       conf.set(entry.getKey(), entry.getValue());
     }
+  }
+
+  public static void validateApplicationTimeouts(
+      Map<ApplicationTimeoutType, Long> timeouts) throws YarnException {
+    if (timeouts != null) {
+      for (Map.Entry<ApplicationTimeoutType, Long> timeout : timeouts
+          .entrySet()) {
+        if (timeout.getValue() <= 0) {
+          String message = "Invalid application timeout, value="
+              + timeout.getValue() + " for type=" + timeout.getKey();
+          throw new YarnException(message);
+        }
+      }
+    }
+  }
+
+  /**
+   * Validate ISO8601 format with epoch time.
+   * @param timeoutsInISO8601 format
+   * @return expire time in local epoch
+   * @throws YarnException if given application timeout value is lesser than
+   *           current time.
+   */
+  public static Map<ApplicationTimeoutType, Long> validateISO8601AndConvertToLocalTimeEpoch(
+      Map<ApplicationTimeoutType, String> timeoutsInISO8601)
+      throws YarnException {
+    long currentTimeMillis = clock.getTime();
+    Map<ApplicationTimeoutType, Long> newApplicationTimeout =
+        new HashMap<ApplicationTimeoutType, Long>();
+    if (timeoutsInISO8601 != null) {
+      for (Map.Entry<ApplicationTimeoutType, String> timeout : timeoutsInISO8601
+          .entrySet()) {
+        long expireTime = 0L;
+        try {
+          expireTime =
+              Times.parseISO8601ToLocalTimeInMillis(timeout.getValue());
+        } catch (ParseException ex) {
+          String message =
+              "Expire time is not in ISO8601 format. ISO8601 supported "
+                  + "format is yyyy-MM-dd'T'HH:mm:ss.SSSZ";
+          throw new YarnException(message);
+        }
+        if (expireTime < currentTimeMillis) {
+          String message =
+              "Expire time is less than current time, current-time="
+                  + Times.formatISO8601(currentTimeMillis) + " expire-time="
+                  + Times.formatISO8601(expireTime);
+          throw new YarnException(message);
+        }
+        newApplicationTimeout.put(timeout.getKey(), expireTime);
+      }
+    }
+    return newApplicationTimeout;
   }
 }

@@ -111,9 +111,11 @@ import org.junit.Test;
 public class TestContainerLaunch extends BaseContainerManagerTest {
 
   private static final String INVALID_JAVA_HOME = "/no/jvm/here";
-  protected Context distContext = new NMContext(new NMContainerTokenSecretManager(
-    conf), new NMTokenSecretManagerInNM(), null,
-    new ApplicationACLsManager(conf), new NMNullStateStoreService(), false) {
+  protected Context distContext =
+      new NMContext(new NMContainerTokenSecretManager(conf),
+          new NMTokenSecretManagerInNM(), null,
+          new ApplicationACLsManager(conf), new NMNullStateStoreService(),
+          false, conf) {
     public int getHttpPort() {
       return HTTP_PORT;
     };
@@ -172,7 +174,8 @@ public class TestContainerLaunch extends BaseContainerManagerTest {
 
       new DefaultContainerExecutor()
           .writeLaunchEnv(fos, env, resources, commands,
-              new Path(localLogDir.getAbsolutePath()), tempFile.getName());
+              new Path(localLogDir.getAbsolutePath()), "user",
+              tempFile.getName());
       fos.flush();
       fos.close();
       FileUtil.setExecutable(tempFile, true);
@@ -241,7 +244,7 @@ public class TestContainerLaunch extends BaseContainerManagerTest {
       }
       new DefaultContainerExecutor()
           .writeLaunchEnv(fos, env, resources, commands,
-              new Path(localLogDir.getAbsolutePath()));
+              new Path(localLogDir.getAbsolutePath()), "user");
       fos.flush();
       fos.close();
       FileUtil.setExecutable(tempFile, true);
@@ -296,7 +299,7 @@ public class TestContainerLaunch extends BaseContainerManagerTest {
       List<String> commands = new ArrayList<String>();
       new DefaultContainerExecutor()
           .writeLaunchEnv(fos, env, resources, commands,
-              new Path(localLogDir.getAbsolutePath()));
+              new Path(localLogDir.getAbsolutePath()), "user");
       fos.flush();
       fos.close();
 
@@ -375,7 +378,7 @@ public class TestContainerLaunch extends BaseContainerManagerTest {
       commands.add(command);
       ContainerExecutor exec = new DefaultContainerExecutor();
       exec.writeLaunchEnv(fos, env, resources, commands,
-          new Path(localLogDir.getAbsolutePath()));
+          new Path(localLogDir.getAbsolutePath()), "user");
       fos.flush();
       fos.close();
 
@@ -1398,7 +1401,8 @@ public class TestContainerLaunch extends BaseContainerManagerTest {
         ContainerExecutor exec = new DefaultContainerExecutor();
         exec.setConf(conf);
         exec.writeLaunchEnv(fos, env, resources, commands,
-          new Path(localLogDir.getAbsolutePath()), tempFile.getName());
+            new Path(localLogDir.getAbsolutePath()), "user",
+            tempFile.getName());
         fos.flush();
         fos.close();
         FileUtil.setExecutable(tempFile, true);

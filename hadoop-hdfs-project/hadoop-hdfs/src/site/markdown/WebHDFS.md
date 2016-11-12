@@ -37,10 +37,12 @@ WebHDFS REST API
         * [Truncate a File](#Truncate_a_File)
         * [Status of a File/Directory](#Status_of_a_FileDirectory)
         * [List a Directory](#List_a_Directory)
+        * [Iteratively List a Directory](#Iteratively_List_a_Directory)
     * [Other File System Operations](#Other_File_System_Operations)
         * [Get Content Summary of a Directory](#Get_Content_Summary_of_a_Directory)
         * [Get File Checksum](#Get_File_Checksum)
         * [Get Home Directory](#Get_Home_Directory)
+        * [Get Trash Root](#Get_Trash_Root)
         * [Set Permission](#Set_Permission)
         * [Set Owner](#Set_Owner)
         * [Set Replication Factor](#Set_Replication_Factor)
@@ -121,6 +123,7 @@ WebHDFS REST API
         * [Token Kind](#Token_Kind)
         * [Token Service](#Token_Service)
         * [Username](#Username)
+        * [NoRedirect](#NoRedirect)
 
 Document Conventions
 --------------------
@@ -142,10 +145,12 @@ The HTTP REST API supports the complete [FileSystem](../../api/org/apache/hadoop
     * [`OPEN`](#Open_and_Read_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).open)
     * [`GETFILESTATUS`](#Status_of_a_FileDirectory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileStatus)
     * [`LISTSTATUS`](#List_a_Directory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).listStatus)
+    * [`LISTSTATUS_BATCH`](#Iteratively_List_a_Directory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).listStatusIterator)
     * [`GETCONTENTSUMMARY`](#Get_Content_Summary_of_a_Directory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getContentSummary)
     * [`GETFILECHECKSUM`](#Get_File_Checksum) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileChecksum)
     * [`GETHOMEDIRECTORY`](#Get_Home_Directory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getHomeDirectory)
     * [`GETDELEGATIONTOKEN`](#Get_Delegation_Token) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getDelegationToken)
+    * [`GETTRASHROOT`](#Get_Trash_Root) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getTrashRoot)
     * [`GETXATTRS`](#Get_an_XAttr) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getXAttr)
     * [`GETXATTRS`](#Get_multiple_XAttrs) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getXAttrs)
     * [`GETXATTRS`](#Get_all_XAttrs) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getXAttrs)
@@ -169,7 +174,7 @@ The HTTP REST API supports the complete [FileSystem](../../api/org/apache/hadoop
 *   HTTP POST
     * [`APPEND`](#Append_to_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).append)
     * [`CONCAT`](#Concat_Files) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).concat)
-    * [`TRUNCATE`](#Truncate_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).concat)
+    * [`TRUNCATE`](#Truncate_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).truncate)
 *   HTTP DELETE
     * [`DELETE`](#Delete_a_FileDirectory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).delete)
     * [`DELETESNAPSHOT`](#Delete_Snapshot) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).deleteSnapshot)
@@ -326,15 +331,21 @@ File and Directory Operations
 
         curl -i -X PUT "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=CREATE
                             [&overwrite=<true |false>][&blocksize=<LONG>][&replication=<SHORT>]
-                            [&permission=<OCTAL>][&buffersize=<INT>]"
+                            [&permission=<OCTAL>][&buffersize=<INT>][&noredirect=<true|false>]"
 
-    The request is redirected to a datanode where the file data is to be written:
+    Usually the request is redirected to a datanode where the file data is to be written.
 
         HTTP/1.1 307 TEMPORARY_REDIRECT
         Location: http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=CREATE...
         Content-Length: 0
 
-* Step 2: Submit another HTTP PUT request using the URL in the `Location` header with the file data to be written.
+    However, if you do not want to be automatically redirected, you can set the noredirect flag.
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        {"Location":"http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=CREATE..."}
+
+* Step 2: Submit another HTTP PUT request using the URL in the `Location` header (or the returned response in case you specified noredirect) with the file data to be written.
 
         curl -i -X PUT -T <LOCAL_FILE> "http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=CREATE..."
 
@@ -354,15 +365,22 @@ See also: [`overwrite`](#Overwrite), [`blocksize`](#Block_Size), [`replication`]
 
 * Step 1: Submit a HTTP POST request without automatically following redirects and without sending the file data.
 
-        curl -i -X POST "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=APPEND[&buffersize=<INT>]"
+        curl -i -X POST "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=APPEND[&buffersize=<INT>][&noredirect=<true|false>]"
 
-    The request is redirected to a datanode where the file data is to be appended:
+    Usually the request is redirected to a datanode where the file data is to be appended:
 
         HTTP/1.1 307 TEMPORARY_REDIRECT
         Location: http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=APPEND...
         Content-Length: 0
 
-* Step 2: Submit another HTTP POST request using the URL in the `Location` header with the file data to be appended.
+   However, if you do not want to be automatically redirected, you can set the noredirect flag.
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        {"Location":"http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=APPEND..."}
+
+
+* Step 2: Submit another HTTP POST request using the URL in the `Location` header (or the returned response in case you specified noredirect) with the file data to be appended.
 
         curl -i -X POST -T <LOCAL_FILE> "http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=APPEND..."
 
@@ -393,13 +411,19 @@ See also: [`sources`](#Sources), [FileSystem](../../api/org/apache/hadoop/fs/Fil
 * Submit a HTTP GET request with automatically following redirects.
 
         curl -i -L "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=OPEN
-                            [&offset=<LONG>][&length=<LONG>][&buffersize=<INT>]"
+                            [&offset=<LONG>][&length=<LONG>][&buffersize=<INT>][&noredirect=<true|false>]"
 
-    The request is redirected to a datanode where the file data can be read:
+    Usually the request is redirected to a datanode where the file data can be read:
 
         HTTP/1.1 307 TEMPORARY_REDIRECT
         Location: http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=OPEN...
         Content-Length: 0
+
+    However if you do not want to be automatically redirected, you can set the noredirect flag.
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        {"Location":"http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=OPEN..."}
 
     The client follows the redirect to the datanode and receives the file data:
 
@@ -557,7 +581,7 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileSt
                 "group"           : "supergroup",
                 "length"          : 0,
                 "modificationTime": 1320895981256,
-                "owner"           : "szetszwo",
+                "owner"           : "username",
                 "pathSuffix"      : "bar",
                 "permission"      : "711",
                 "replication"     : 0,
@@ -569,6 +593,135 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileSt
         }
 
 See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).listStatus
+
+### Iteratively List a Directory
+
+* Submit a HTTP GET request.
+
+        curl -i  "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=LISTSTATUS_BATCH&startAfter=<CHILD>"
+
+    The client receives a response with a [`DirectoryListing` JSON object](#DirectoryListing_JSON_Schema), which contains a [`FileStatuses` JSON object](#FileStatuses_JSON_Schema), as well as iteration information:
+
+        HTTP/1.1 200 OK
+        Cache-Control: no-cache
+        Expires: Thu, 08 Sep 2016 03:40:38 GMT
+        Date: Thu, 08 Sep 2016 03:40:38 GMT
+        Pragma: no-cache
+        Expires: Thu, 08 Sep 2016 03:40:38 GMT
+        Date: Thu, 08 Sep 2016 03:40:38 GMT
+        Pragma: no-cache
+        Content-Type: application/json
+        X-FRAME-OPTIONS: SAMEORIGIN
+        Transfer-Encoding: chunked
+        Server: Jetty(6.1.26)
+
+        {
+            "DirectoryListing": {
+                "partialListing": {
+                    "FileStatuses": {
+                        "FileStatus": [
+                            {
+                                "accessTime": 0,
+                                "blockSize": 0,
+                                "childrenNum": 0,
+                                "fileId": 16387,
+                                "group": "supergroup",
+                                "length": 0,
+                                "modificationTime": 1473305882563,
+                                "owner": "andrew",
+                                "pathSuffix": "bardir",
+                                "permission": "755",
+                                "replication": 0,
+                                "storagePolicy": 0,
+                                "type": "DIRECTORY"
+                            },
+                            {
+                                "accessTime": 1473305896945,
+                                "blockSize": 1024,
+                                "childrenNum": 0,
+                                "fileId": 16388,
+                                "group": "supergroup",
+                                "length": 0,
+                                "modificationTime": 1473305896965,
+                                "owner": "andrew",
+                                "pathSuffix": "bazfile",
+                                "permission": "644",
+                                "replication": 3,
+                                "storagePolicy": 0,
+                                "type": "FILE"
+                            }
+                        ]
+                    }
+                },
+                "remainingEntries": 2
+            }
+        }
+
+If `remainingEntries` is non-zero, there are additional entries in the directory.
+To query the next batch, set the `startAfter` parameter to the `pathSuffix` of the last item returned in the current batch. For example:
+
+        curl -i  "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=LISTSTATUS_BATCH&startAfter=bazfile"
+
+Which will return the next batch of directory entries:
+
+        HTTP/1.1 200 OK
+        Cache-Control: no-cache
+        Expires: Thu, 08 Sep 2016 03:43:20 GMT
+        Date: Thu, 08 Sep 2016 03:43:20 GMT
+        Pragma: no-cache
+        Expires: Thu, 08 Sep 2016 03:43:20 GMT
+        Date: Thu, 08 Sep 2016 03:43:20 GMT
+        Pragma: no-cache
+        Content-Type: application/json
+        X-FRAME-OPTIONS: SAMEORIGIN
+        Transfer-Encoding: chunked
+        Server: Jetty(6.1.26)
+
+        {
+            "DirectoryListing": {
+                "partialListing": {
+                    "FileStatuses": {
+                        "FileStatus": [
+                            {
+                                "accessTime": 0,
+                                "blockSize": 0,
+                                "childrenNum": 0,
+                                "fileId": 16386,
+                                "group": "supergroup",
+                                "length": 0,
+                                "modificationTime": 1473305878951,
+                                "owner": "andrew",
+                                "pathSuffix": "foodir",
+                                "permission": "755",
+                                "replication": 0,
+                                "storagePolicy": 0,
+                                "type": "DIRECTORY"
+                            },
+                            {
+                                "accessTime": 1473305902864,
+                                "blockSize": 1024,
+                                "childrenNum": 0,
+                                "fileId": 16389,
+                                "group": "supergroup",
+                                "length": 0,
+                                "modificationTime": 1473305902878,
+                                "owner": "andrew",
+                                "pathSuffix": "quxfile",
+                                "permission": "644",
+                                "replication": 3,
+                                "storagePolicy": 0,
+                                "type": "FILE"
+                            }
+                        ]
+                    }
+                },
+                "remainingEntries": 0
+            }
+        }
+
+Batch size is controlled by the `dfs.ls.limit` option on the NameNode.
+
+See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).listStatusIterator
 
 Other File System Operations
 ----------------------------
@@ -623,11 +776,18 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getConten
 
         curl -i "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=GETFILECHECKSUM"
 
-    The request is redirected to a datanode:
+    Usually the request is redirected to a datanode:
 
         HTTP/1.1 307 TEMPORARY_REDIRECT
         Location: http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=GETFILECHECKSUM...
         Content-Length: 0
+
+    However, if you do not want to be automatically redirected, you can set the noredirect flag.
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        {"Location":"http://<DATANODE>:<PORT>/webhdfs/v1/<PATH>?op=GETFILECHECKSUM..."}
+
 
     The client follows the redirect to the datanode and receives a [`FileChecksum` JSON object](#FileChecksum_JSON_Schema):
 
@@ -658,9 +818,35 @@ See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getFileCh
         Content-Type: application/json
         Transfer-Encoding: chunked
 
-        {"Path": "/user/szetszwo"}
+        {"Path": "/user/username"}
 
 See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getHomeDirectory
+
+### Get Trash Root
+
+* Submit a HTTP GET request.
+
+        curl -i "http://<HOST>:<PORT>/webhdfs/v1/<PATH>?op=GETTRASHROOT"
+
+    The client receives a response with a [`Path` JSON object](#Path_JSON_Schema):
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        Transfer-Encoding: chunked
+
+        {"Path": "/user/username/.Trash"}
+
+    if the path is an encrypted zone path and user has permission of the path, the client receives a response like this:
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        Transfer-Encoding: chunked
+
+        {"Path": "/PATH/.Trash/username"}
+
+See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).getTrashRoot
+
+For more details about trash root in an encrypted zone, please refer to [Transparent Encryption Guide](./TransparentEncryption.html#Rename_and_Trash_considerations).
 
 ### Set Permission
 
@@ -980,7 +1166,7 @@ Snapshot Operations
         Content-Type: application/json
         Transfer-Encoding: chunked
 
-        {"Path": "/user/szetszwo/.snapshot/s1"}
+        {"Path": "/user/username/.snapshot/s1"}
 
 See also: [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).createSnapshot
 
@@ -1163,7 +1349,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
       {
         "entries":
         {
-          "type": "array"
+          "type": "array",
           "items":
           {
             "description": "ACL entry.",
@@ -1187,7 +1373,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
           "description": "True if the sticky bit is on.",
           "type"       : "boolean",
           "required"   : true
-        },
+        }
       }
     }
   }
@@ -1206,7 +1392,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
       "type"      : "array",
       "items":
       {
-        "type"    " "object",
+        "type"    : "object",
         "properties":
         {
           "name":
@@ -1237,7 +1423,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
     "XAttrNames":
     {
       "description": "XAttr names.",
-      "type"       : "string"
+      "type"       : "string",
       "required"   : true
     }
   }
@@ -1541,6 +1727,41 @@ A `FileStatuses` JSON object represents an array of `FileStatus` JSON objects.
 
 See also: [`FileStatus` Properties](#FileStatus_Properties), [`LISTSTATUS`](#List_a_Directory), [FileStatus](../../api/org/apache/hadoop/fs/FileStatus.html)
 
+### DirectoryListing JSON Schema
+
+A `DirectoryListing` JSON object represents a batch of directory entries while iteratively listing a directory. It contains a `FileStatuses` JSON object as well as iteration information.
+
+```json
+{
+  "name"      : "DirectoryListing",
+  "properties":
+  {
+    "DirectoryListing":
+    {
+      "type"      : "object",
+      "properties":
+      {
+        "partialListing":
+        {
+          "description": "A partial directory listing",
+          "type"       : "object", // A FileStatuses object
+          "required"   : true
+        },
+        "remainingEntries":
+        {
+          "description": "Number of remaining entries",
+          "type"       : "integer",
+          "required"   : true
+        }
+      }
+    }
+  }
+
+}
+```
+
+See also: [`FileStatuses` JSON Schema](#FileStatuses_JSON_Schema), [`LISTSTATUS_BATCH`](#Iteratively_List_a_Directory), [FileStatus](../../api/org/apache/hadoop/fs/FileStatus.html)
+
 ### Long JSON Schema
 
 ```json
@@ -1606,7 +1827,7 @@ See also: [`GETHOMEDIRECTORY`](#Get_Home_Directory), [Path](../../api/org/apache
         "javaClassName":                                     //an optional property
         {
           "description": "Java class name of the exception",
-          "type"       : "string",
+          "type"       : "string"
         }
       }
     }
@@ -2048,3 +2269,15 @@ See also: [`GETDELEGATIONTOKEN`](#Get_Delegation_Token)
 | Syntax | Any string. |
 
 See also: [Authentication](#Authentication)
+
+### NoRedirect
+
+| Name | `noredirect` |
+|:---- |:---- |
+| Description | Whether the response should return an HTTP 307 redirect or HTTP 200 OK. See [Create and Write to a File](#Create_and_Write_to_a_File). |
+| Type | boolean |
+| Default Value | false |
+| Valid Values | true |
+| Syntax | true |
+
+See also: [Create and Write to a File](#Create_and_Write_to_a_File)

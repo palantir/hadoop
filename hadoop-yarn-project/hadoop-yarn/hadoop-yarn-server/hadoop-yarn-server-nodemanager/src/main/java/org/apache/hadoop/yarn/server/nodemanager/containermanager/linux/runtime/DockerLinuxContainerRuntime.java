@@ -40,6 +40,7 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.privileg
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.CGroupsHandler;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.resources.ResourceHandlerModule;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.docker.DockerClient;
+import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.docker.DockerInspectCommand;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.docker.DockerRunCommand;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.linux.runtime.docker.DockerStopCommand;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.runtime.ContainerExecutionException;
@@ -145,6 +146,8 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
   public static final String ENV_DOCKER_CONTAINER_LOCAL_RESOURCE_MOUNTS =
       "YARN_CONTAINER_RUNTIME_DOCKER_LOCAL_RESOURCE_MOUNTS";
 
+  static final String CGROUPS_ROOT_DIRECTORY = "/sys/fs/cgroup";
+
   private Configuration conf;
   private DockerClient dockerClient;
   private PrivilegedOperationExecutor privilegedOperationExecutor;
@@ -216,9 +219,10 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
     dockerClient = new DockerClient(conf);
     allowedNetworks.clear();
     allowedNetworks.addAll(Arrays.asList(
-        conf.getStrings(YarnConfiguration.NM_DOCKER_ALLOWED_CONTAINER_NETWORKS,
+        conf.getTrimmedStrings(
+            YarnConfiguration.NM_DOCKER_ALLOWED_CONTAINER_NETWORKS,
             YarnConfiguration.DEFAULT_NM_DOCKER_ALLOWED_CONTAINER_NETWORKS)));
-    defaultNetwork = conf.get(
+    defaultNetwork = conf.getTrimmed(
         YarnConfiguration.NM_DOCKER_DEFAULT_CONTAINER_NETWORK,
         YarnConfiguration.DEFAULT_NM_DOCKER_DEFAULT_CONTAINER_NETWORK);
 
@@ -234,7 +238,7 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
       throw new ContainerExecutionException(message);
     }
 
-    privilegedContainersAcl = new AccessControlList(conf.get(
+    privilegedContainersAcl = new AccessControlList(conf.getTrimmed(
         YarnConfiguration.NM_DOCKER_PRIVILEGED_CONTAINERS_ACL,
         YarnConfiguration.DEFAULT_NM_DOCKER_PRIVILEGED_CONTAINERS_ACL));
   }
@@ -436,10 +440,10 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
         LOCALIZED_RESOURCES);
     @SuppressWarnings("unchecked")
     List<String> userLocalDirs = ctx.getExecutionAttribute(USER_LOCAL_DIRS);
-
-    Set<String> capabilities = new HashSet<>(Arrays.asList(conf.getStrings(
-        YarnConfiguration.NM_DOCKER_CONTAINER_CAPABILITIES,
-        YarnConfiguration.DEFAULT_NM_DOCKER_CONTAINER_CAPABILITIES)));
+    Set<String> capabilities = new HashSet<>(Arrays.asList(
+        conf.getTrimmedStrings(
+            YarnConfiguration.NM_DOCKER_CONTAINER_CAPABILITIES,
+            YarnConfiguration.DEFAULT_NM_DOCKER_CONTAINER_CAPABILITIES)));
 
     @SuppressWarnings("unchecked")
     DockerRunCommand runCommand = new DockerRunCommand(containerIdStr,
@@ -448,7 +452,8 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
         .setContainerWorkDir(containerWorkDir.toString())
         .setNetworkType(network)
         .setCapabilities(capabilities)
-        .addMountLocation("/sys/fs/cgroup", "/sys/fs/cgroup:ro", false);
+        .addMountLocation(CGROUPS_ROOT_DIRECTORY,
+            CGROUPS_ROOT_DIRECTORY + ":ro", false);
     List<String> allDirs = new ArrayList<>(containerLocalDirs);
 
     allDirs.addAll(filecacheDirs);
@@ -592,5 +597,42 @@ public class DockerLinuxContainerRuntime implements LinuxContainerRuntime {
   @Override
   public void reapContainer(ContainerRuntimeContext ctx)
       throws ContainerExecutionException {
+  }
+
+
+  // ipAndHost[0] contains comma separated list of IPs
+  // ipAndHost[1] contains the hostname.
+  @Override
+  public String[] getIpAndHost(Container container) {
+    String containerId = container.getContainerId().toString();
+    DockerInspectCommand inspectCommand =
+        new DockerInspectCommand(containerId).getIpAndHost();
+    try {
+      String commandFile = dockerClient.writeCommandToTempFile(inspectCommand,
+          containerId);
+      PrivilegedOperation privOp = new PrivilegedOperation(
+          PrivilegedOperation.OperationType.RUN_DOCKER_CMD);
+      privOp.appendArgs(commandFile);
+      String output = privilegedOperationExecutor
+          .executePrivilegedOperation(null, privOp, null,
+              container.getLaunchContext().getEnvironment(), true, false);
+      LOG.info("Docker inspect output for " + containerId + ": " + output);
+      int index = output.lastIndexOf(',');
+      if (index == -1) {
+        LOG.error("Incorrect format for ip and host");
+        return null;
+      }
+      String ips = output.substring(0, index).trim();
+      String host = output.substring(index+1).trim();
+      String[] ipAndHost = new String[2];
+      ipAndHost[0] = ips;
+      ipAndHost[1] = host;
+      return ipAndHost;
+    } catch (ContainerExecutionException e) {
+      LOG.error("Error when writing command to temp file", e);
+    } catch (PrivilegedOperationException e) {
+      LOG.error("Error when executing command.", e);
+    }
+    return null;
   }
 }

@@ -118,11 +118,16 @@ public abstract class BaseContainerManagerTest {
   protected static final int HTTP_PORT = 5412;
   protected Configuration conf = new YarnConfiguration();
   protected Context context = new NMContext(new NMContainerTokenSecretManager(
-    conf), new NMTokenSecretManagerInNM(), null,
-    new ApplicationACLsManager(conf), new NMNullStateStoreService(), false) {
+      conf), new NMTokenSecretManagerInNM(), null,
+      new ApplicationACLsManager(conf), new NMNullStateStoreService(), false,
+      conf) {
     public int getHttpPort() {
       return HTTP_PORT;
-    };
+    }
+    @Override
+    public ContainerExecutor getContainerExecutor() {
+      return exec;
+    }
   };
   protected ContainerExecutor exec;
   protected DeletionService delSrvc;
@@ -402,7 +407,7 @@ public abstract class BaseContainerManagerTest {
       LogAggregationContext logAggregationContext, ExecutionType executionType)
       throws IOException {
     ContainerTokenIdentifier containerTokenIdentifier =
-        new ContainerTokenIdentifier(cId, nodeId.toString(), user, resource,
+        new ContainerTokenIdentifier(cId, 0, nodeId.toString(), user, resource,
             System.currentTimeMillis() + 100000L, 123, rmIdentifier,
             Priority.newInstance(0), 0, logAggregationContext, null,
             ContainerType.TASK, executionType);

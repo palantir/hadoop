@@ -33,7 +33,7 @@
   $(window).bind('hashchange', function () {
     $('#alert-panel').hide();
 
-    var dir = window.location.hash.slice(1);
+    var dir = decodeURIComponent(window.location.hash.slice(1));
     if(dir == "") {
       dir = "/";
     }
@@ -310,22 +310,28 @@
           var absolute_file_path = append_path(current_directory, inode_name);
           delete_path(inode_name, absolute_file_path);
         });
-          
-          $('#table-explorer').dataTable( {
-              'lengthMenu': [ [25, 50, 100, -1], [25, 50, 100, "All"] ],
-              'columns': [
-                  {'searchable': false }, //Permissions
-                  null, //Owner
-                  null, //Group
-                  { 'searchable': false, 'render': func_size_render}, //Size
-                  { 'searchable': false, 'render': func_time_render}, //Last Modified
-                  { 'searchable': false }, //Replication
-                  null, //Block Size
-                  null, //Name
-                  { 'sortable' : false } //Trash
-              ],
-              "deferRender": true
-          });
+
+        $('#file-selector-all').click(function() {
+          $('.file_selector').prop('checked', $('#file-selector-all')[0].checked );
+        });
+
+        //This needs to be last because it repaints the table
+        $('#table-explorer').dataTable( {
+          'lengthMenu': [ [25, 50, 100, -1], [25, 50, 100, "All"] ],
+          'columns': [
+            { 'orderable' : false }, //select
+            {'searchable': false }, //Permissions
+            null, //Owner
+            null, //Group
+            { 'searchable': false, 'render': func_size_render}, //Size
+            { 'searchable': false, 'render': func_time_render}, //Last Modified
+            { 'searchable': false }, //Replication
+            null, //Block Size
+            null, //Name
+            { 'orderable' : false } //Trash
+          ],
+          "deferRender": true
+        });
       });
     }).error(network_error_handler(url));
   }
@@ -365,6 +371,102 @@
        $('#btn-create-directory-send').button('reset');
     });
   })
+
+  $('#modal-upload-file-button').click(function() {
+    $(this).prop('disabled', true);
+    $(this).button('complete');
+    var files = []
+    var numCompleted = 0
+
+    for(var i = 0; i < $('#modal-upload-file-input').prop('files').length; i++) {
+      (function() {
+        var file = $('#modal-upload-file-input').prop('files')[i];
+        var url = '/webhdfs/v1' + current_directory;
+        url = encode_path(append_path(url, file.name));
+        url += '?op=CREATE&noredirect=true';
+        files.push( { file: file } )
+        files[i].request = $.ajax({
+          type: 'PUT',
+          url: url,
+          processData: false,
+          crossDomain: true
+        });
+      })()
+     }
+    for(var f in files) {
+      (function() {
+        var file = files[f];
+        file.request.done(function(data) {
+          var url = data['Location'];
+          $.ajax({
+            type: 'PUT',
+            url: url,
+            data: file.file,
+            processData: false,
+            crossDomain: true
+          }).complete(function(data) {
+            numCompleted++;
+            if(numCompleted == files.length) {
+              $('#modal-upload-file').modal('hide');
+              $('#modal-upload-file-button').button('reset');
+              browse_directory(current_directory);
+            }
+          }).error(function(jqXHR, textStatus, errorThrown) {
+            numCompleted++;
+            show_err_msg("Couldn't upload the file " + file.file.name + ". "+ errorThrown);
+          });
+        }).error(function(jqXHR, textStatus, errorThrown) {
+          numCompleted++;
+          show_err_msg("Couldn't find datanode to write file. " + errorThrown);
+        });
+      })();
+    }
+  });
+
+  //Store the list of files which have been checked into session storage
+  function store_selected_files(current_directory) {
+    sessionStorage.setItem("source_directory", current_directory);
+    var selected_files = $("input:checked.file_selector");
+    var selected_file_names = new Array();
+    selected_files.each(function(index) {
+      selected_file_names[index] = $(this).closest('tr').attr('inode-path');
+    })
+    sessionStorage.setItem("selected_file_names", JSON.stringify(selected_file_names));
+    alert("Cut " + selected_file_names.length + " files/directories");
+  }
+
+  //Retrieve the list of files from session storage and rename them to the current
+  //directory
+  function paste_selected_files() {
+    var files = JSON.parse(sessionStorage.getItem("selected_file_names"));
+    var source_directory = sessionStorage.getItem("source_directory");
+    $.each(files, function(index, value) {
+      var url = "/webhdfs/v1"
+        + encode_path(append_path(source_directory, value))
+        + '?op=RENAME&destination='
+        + encode_path(append_path(current_directory, value));
+      $.ajax({
+        type: 'PUT',
+        url: url
+      }).done(function(data) {
+        if(index == files.length - 1) {
+          browse_directory(current_directory);
+        }
+      }).error(function(jqXHR, textStatus, errorThrown) {
+        show_err_msg("Couldn't move file " + value + ". " + errorThrown);
+      });
+
+    })
+  }
+
+  $('#explorer-cut').click(function() {
+    store_selected_files(current_directory);
+  });
+
+  $('#explorer-paste').click(function() {
+    paste_selected_files();
+  });
+
 
   init();
 })();

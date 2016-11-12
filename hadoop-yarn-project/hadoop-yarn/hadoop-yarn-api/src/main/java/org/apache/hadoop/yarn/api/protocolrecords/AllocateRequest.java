@@ -27,8 +27,8 @@ import org.apache.hadoop.yarn.api.ApplicationMasterProtocol;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ResourceBlacklistRequest;
-import org.apache.hadoop.yarn.api.records.ContainerResourceChangeRequest;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.util.Records;
 
 /**
@@ -48,13 +48,8 @@ import org.apache.hadoop.yarn.util.Records;
  *     A list of unused {@link Container} which are being returned.
  *   </li>
  *   <li>
- *     A list of {@link ContainerResourceChangeRequest} to inform
- *     the <code>ResourceManager</code> about the resource increase
- *     requirements of running containers.
- *   </li>
- *   <li>
- *     A list of {@link ContainerResourceChangeRequest} to inform
- *     the <code>ResourceManager</code> about the resource decrease
+ *     A list of {@link UpdateContainerRequest} to inform
+ *     the <code>ResourceManager</code> about the change in
  *     requirements of running containers.
  *   </li>
  * </ul>
@@ -71,27 +66,25 @@ public abstract class AllocateRequest {
       List<ResourceRequest> resourceAsk,
       List<ContainerId> containersToBeReleased,
       ResourceBlacklistRequest resourceBlacklistRequest) {
-    return newInstance(responseID, appProgress, resourceAsk,
-        containersToBeReleased, resourceBlacklistRequest, null, null);
+    return AllocateRequest.newBuilder().responseId(responseID)
+        .progress(appProgress).askList(resourceAsk)
+        .releaseList(containersToBeReleased)
+        .resourceBlacklistRequest(resourceBlacklistRequest).build();
   }
   
   @Public
-  @Stable
+  @Unstable
   public static AllocateRequest newInstance(int responseID, float appProgress,
       List<ResourceRequest> resourceAsk,
       List<ContainerId> containersToBeReleased,
       ResourceBlacklistRequest resourceBlacklistRequest,
-      List<ContainerResourceChangeRequest> increaseRequests,
-      List<ContainerResourceChangeRequest> decreaseRequests) {
-    AllocateRequest allocateRequest = Records.newRecord(AllocateRequest.class);
-    allocateRequest.setResponseId(responseID);
-    allocateRequest.setProgress(appProgress);
-    allocateRequest.setAskList(resourceAsk);
-    allocateRequest.setReleaseList(containersToBeReleased);
-    allocateRequest.setResourceBlacklistRequest(resourceBlacklistRequest);
-    allocateRequest.setIncreaseRequests(increaseRequests);
-    allocateRequest.setDecreaseRequests(decreaseRequests);
-    return allocateRequest;
+      List<UpdateContainerRequest> updateRequests) {
+    return AllocateRequest.newBuilder().responseId(responseID)
+        .progress(appProgress).askList(resourceAsk)
+        .releaseList(containersToBeReleased)
+        .resourceBlacklistRequest(resourceBlacklistRequest)
+        .updateRequests(updateRequests)
+        .build();
   }
   
   /**
@@ -197,48 +190,137 @@ public abstract class AllocateRequest {
       ResourceBlacklistRequest resourceBlacklistRequest);
   
   /**
-   * Get the list of container resource increase requests being sent by the
+   * Get the list of container update requests being sent by the
    * <code>ApplicationMaster</code>.
-   * @return the list of {@link ContainerResourceChangeRequest}
+   * @return list of {@link UpdateContainerRequest}
    *         being sent by the
    *         <code>ApplicationMaster</code>.
    */
   @Public
   @Unstable
-  public abstract List<ContainerResourceChangeRequest> getIncreaseRequests();
+  public abstract List<UpdateContainerRequest> getUpdateRequests();
 
   /**
-   * Set the list of container resource increase requests to inform the
-   * <code>ResourceManager</code> about the containers whose resources need
-   *         to be increased.
-   * @param increaseRequests list of
-   *        {@link ContainerResourceChangeRequest}
+   * Set the list of container update requests to inform the
+   * <code>ResourceManager</code> about the containers that need to be
+   * updated.
+   * @param updateRequests list of <code>UpdateContainerRequest</code> for
+   *                       containers to be updated
    */
   @Public
   @Unstable
-  public abstract void setIncreaseRequests(
-      List<ContainerResourceChangeRequest> increaseRequests);
+  public abstract void setUpdateRequests(
+      List<UpdateContainerRequest> updateRequests);
 
-  /**
-   * Get the list of container resource decrease requests being sent by the
-   * <code>ApplicationMaster</code>.
-   * @return list of {@link ContainerResourceChangeRequest}
-   *         being sent by the
-   *         <code>ApplicationMaster</code>.
-   */
   @Public
   @Unstable
-  public abstract List<ContainerResourceChangeRequest> getDecreaseRequests();
+  public static AllocateRequestBuilder newBuilder() {
+    return new AllocateRequestBuilder();
+  }
 
   /**
-   * Set the list of container resource decrease requests to inform the
-   * <code>ResourceManager</code> about the containers whose resources need
-   * to be decreased.
-   * @param decreaseRequests list of
-   *        {@link ContainerResourceChangeRequest}
+   * Class to construct instances of {@link AllocateRequest} with specific
+   * options.
    */
   @Public
-  @Unstable
-  public abstract void setDecreaseRequests(
-      List<ContainerResourceChangeRequest> decreaseRequests);
+  @Stable
+  public static final class AllocateRequestBuilder {
+    private AllocateRequest allocateRequest =
+        Records.newRecord(AllocateRequest.class);
+
+    private AllocateRequestBuilder() {
+    }
+
+    /**
+     * Set the <code>responseId</code> of the request.
+     * @see AllocateRequest#setResponseId(int)
+     * @param responseId <code>responseId</code> of the request
+     * @return {@link AllocateRequestBuilder}
+     */
+    @Public
+    @Stable
+    public AllocateRequestBuilder responseId(int responseId) {
+      allocateRequest.setResponseId(responseId);
+      return this;
+    }
+
+    /**
+     * Set the <code>progress</code> of the request.
+     * @see AllocateRequest#setProgress(float)
+     * @param progress <code>progress</code> of the request
+     * @return {@link AllocateRequestBuilder}
+     */
+    @Public
+    @Stable
+    public AllocateRequestBuilder progress(float progress) {
+      allocateRequest.setProgress(progress);
+      return this;
+    }
+
+    /**
+     * Set the <code>askList</code> of the request.
+     * @see AllocateRequest#setAskList(List)
+     * @param askList <code>askList</code> of the request
+     * @return {@link AllocateRequestBuilder}
+     */
+    @Public
+    @Stable
+    public AllocateRequestBuilder askList(List<ResourceRequest> askList) {
+      allocateRequest.setAskList(askList);
+      return this;
+    }
+
+    /**
+     * Set the <code>releaseList</code> of the request.
+     * @see AllocateRequest#setReleaseList(List)
+     * @param releaseList <code>releaseList</code> of the request
+     * @return {@link AllocateRequestBuilder}
+     */
+    @Public
+    @Stable
+    public AllocateRequestBuilder releaseList(List<ContainerId> releaseList) {
+      allocateRequest.setReleaseList(releaseList);
+      return this;
+    }
+
+    /**
+     * Set the <code>resourceBlacklistRequest</code> of the request.
+     * @see AllocateRequest#setResourceBlacklistRequest(
+     * ResourceBlacklistRequest)
+     * @param resourceBlacklistRequest
+     *     <code>resourceBlacklistRequest</code> of the request
+     * @return {@link AllocateRequestBuilder}
+     */
+    @Public
+    @Stable
+    public AllocateRequestBuilder resourceBlacklistRequest(
+        ResourceBlacklistRequest resourceBlacklistRequest) {
+      allocateRequest.setResourceBlacklistRequest(resourceBlacklistRequest);
+      return this;
+    }
+
+    /**
+     * Set the <code>updateRequests</code> of the request.
+     * @see AllocateRequest#setUpdateRequests(List)
+     * @param updateRequests <code>updateRequests</code> of the request
+     * @return {@link AllocateRequestBuilder}
+     */
+    @Public
+    @Unstable
+    public AllocateRequestBuilder updateRequests(
+        List<UpdateContainerRequest> updateRequests) {
+      allocateRequest.setUpdateRequests(updateRequests);
+      return this;
+    }
+
+    /**
+     * Return generated {@link AllocateRequest} object.
+     * @return {@link AllocateRequest}
+     */
+    @Public
+    @Stable
+    public AllocateRequest build() {
+      return allocateRequest;
+    }
+  }
 }

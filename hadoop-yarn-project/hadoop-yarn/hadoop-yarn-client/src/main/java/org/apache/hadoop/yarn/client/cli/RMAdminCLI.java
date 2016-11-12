@@ -29,6 +29,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.GnuParser;
+import org.apache.commons.cli.MissingArgumentException;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
@@ -80,7 +86,6 @@ public class RMAdminCLI extends HAAdmin {
 
   private final RecordFactory recordFactory = 
     RecordFactoryProvider.getRecordFactory(null);
-  private boolean directlyAccessNodeLabelStore = false;
   static CommonNodeLabelsManager localNodeLabelsManager = null;
   private static final String NO_LABEL_ERR_MSG =
       "No cluster node-labels are specified";
@@ -131,10 +136,13 @@ public class RMAdminCLI extends HAAdmin {
                   "remove from cluster node labels"))
           .put("-replaceLabelsOnNode",
               new UsageInfo(
-                  "<\"node1[:port]=label1,label2 node2[:port]=label1,label2\">",
-                  "replace labels on nodes"
-                      + " (please note that we do not support specifying multiple"
-                      + " labels on a single host for now.)"))
+                  "<\"node1[:port]=label1,label2 node2[:port]=label1,label2\"> "
+                  + "[-failOnUnknownNodes] ",
+              "replace labels on nodes"
+                  + " (please note that we do not support specifying multiple"
+                  + " labels on a single host for now.)\n\t\t"
+                  + "[-failOnUnknownNodes] is optional, when we set this"
+                  + " option, it will fail if specified nodes are unknown."))
           .put("-directlyAccessNodeLabelStore",
               new UsageInfo("", "This is DEPRECATED, will be removed in future releases. Directly access node label store, "
                   + "with this option, all node label related operations"
@@ -246,9 +254,11 @@ public class RMAdminCLI extends HAAdmin {
         " [-addToClusterNodeLabels <\"label1(exclusive=true),"
             + "label2(exclusive=false),label3\">]" +
         " [-removeFromClusterNodeLabels <label1,label2,label3>]" +
-        " [-replaceLabelsOnNode <\"node1[:port]=label1,label2" +
-        " node2[:port]=label1\">]" +
+        " [-replaceLabelsOnNode " +
+            "<\"node1[:port]=label1,label2 node2[:port]=label1\"> " +
+            "[-failOnUnknownNodes]]" +
         " [-directlyAccessNodeLabelStore]" +
+        " [-refreshClusterMaxPriority]" +
         " [-updateNodeResource [NodeID] [MemSize] [vCores]" +
         " ([OvercommitTimeout])");
     if (isHAEnabled) {
@@ -301,7 +311,7 @@ public class RMAdminCLI extends HAAdmin {
     return ClientRMProxy.createRMProxy(conf,
         ResourceManagerAdministrationProtocol.class);
   }
-  
+
   private int refreshQueues() throws IOException, YarnException {
     // Refresh the queue properties
     ResourceManagerAdministrationProtocol adminProtocol = createAdminProtocol();
@@ -573,11 +583,26 @@ public class RMAdminCLI extends HAAdmin {
     return labels;
   }
 
-  private int addToClusterNodeLabels(String args) throws IOException,
-      YarnException {
-    List<NodeLabel> labels = buildNodeLabelsFromStr(args);
+  private int handleAddToClusterNodeLabels(String[] args, String cmd,
+      boolean isHAEnabled) throws IOException, YarnException, ParseException {
+    Options opts = new Options();
+    opts.addOption("addToClusterNodeLabels", true,
+        "Add to cluster node labels.");
+    opts.addOption("directlyAccessNodeLabelStore", false,
+        "Directly access node label store.");
+    int exitCode = -1;
+    CommandLine cliParser = null;
+    try {
+      cliParser = new GnuParser().parse(opts, args);
+    } catch (MissingArgumentException ex) {
+      System.err.println(NO_LABEL_ERR_MSG);
+      printUsage(args[0], isHAEnabled);
+      return exitCode;
+    }
 
-    if (directlyAccessNodeLabelStore) {
+    List<NodeLabel> labels = buildNodeLabelsFromStr(
+        cliParser.getOptionValue("addToClusterNodeLabels"));
+    if (cliParser.hasOption("directlyAccessNodeLabelStore")) {
       getNodeLabelManagerInstance(getConf()).addToCluserNodeLabels(labels);
     } else {
       ResourceManagerAdministrationProtocol adminProtocol =
@@ -589,11 +614,26 @@ public class RMAdminCLI extends HAAdmin {
     return 0;
   }
 
-  private int removeFromClusterNodeLabels(String args) throws IOException,
-      YarnException {
-    Set<String> labels = buildNodeLabelNamesFromStr(args);
+  private int handleRemoveFromClusterNodeLabels(String[] args, String cmd,
+      boolean isHAEnabled) throws IOException, YarnException, ParseException {
+    Options opts = new Options();
+    opts.addOption("removeFromClusterNodeLabels", true,
+        "Remove From cluster node labels.");
+    opts.addOption("directlyAccessNodeLabelStore", false,
+        "Directly access node label store.");
+    int exitCode = -1;
+    CommandLine cliParser = null;
+    try {
+      cliParser = new GnuParser().parse(opts, args);
+    } catch (MissingArgumentException ex) {
+      System.err.println(NO_LABEL_ERR_MSG);
+      printUsage(args[0], isHAEnabled);
+      return exitCode;
+    }
 
-    if (directlyAccessNodeLabelStore) {
+    Set<String> labels = buildNodeLabelNamesFromStr(
+        cliParser.getOptionValue("removeFromClusterNodeLabels"));
+    if (cliParser.hasOption("directlyAccessNodeLabelStore")) {
       getNodeLabelManagerInstance(getConf()).removeFromClusterNodeLabels(
           labels);
     } else {
@@ -656,13 +696,34 @@ public class RMAdminCLI extends HAAdmin {
     return map;
   }
 
-  private int replaceLabelsOnNodes(String args) throws IOException,
-      YarnException {
-    Map<NodeId, Set<String>> map = buildNodeLabelsMapFromStr(args);
-    return replaceLabelsOnNodes(map);
+  private int handleReplaceLabelsOnNodes(String[] args, String cmd,
+      boolean isHAEnabled) throws IOException, YarnException, ParseException {
+    Options opts = new Options();
+    opts.addOption("replaceLabelsOnNode", true,
+        "Replace label on node.");
+    opts.addOption("failOnUnknownNodes", false,
+        "Fail on unknown nodes.");
+    opts.addOption("directlyAccessNodeLabelStore", false,
+        "Directly access node label store.");
+    int exitCode = -1;
+    CommandLine cliParser = null;
+    try {
+      cliParser = new GnuParser().parse(opts, args);
+    } catch (MissingArgumentException ex) {
+      System.err.println(NO_MAPPING_ERR_MSG);
+      printUsage(args[0], isHAEnabled);
+      return exitCode;
+    }
+
+    Map<NodeId, Set<String>> map = buildNodeLabelsMapFromStr(
+        cliParser.getOptionValue("replaceLabelsOnNode"));
+    return replaceLabelsOnNodes(map,
+        cliParser.hasOption("failOnUnknownNodes"),
+        cliParser.hasOption("directlyAccessNodeLabelStore"));
   }
 
-  private int replaceLabelsOnNodes(Map<NodeId, Set<String>> map)
+  private int replaceLabelsOnNodes(Map<NodeId, Set<String>> map,
+      boolean failOnUnknownNodes, boolean directlyAccessNodeLabelStore)
       throws IOException, YarnException {
     if (directlyAccessNodeLabelStore) {
       getNodeLabelManagerInstance(getConf()).replaceLabelsOnNode(map);
@@ -671,25 +732,14 @@ public class RMAdminCLI extends HAAdmin {
           createAdminProtocol();
       ReplaceLabelsOnNodeRequest request =
           ReplaceLabelsOnNodeRequest.newInstance(map);
+      request.setFailOnUnknownNodes(failOnUnknownNodes);
       adminProtocol.replaceLabelsOnNode(request);
     }
     return 0;
   }
-  
+
   @Override
   public int run(String[] args) throws Exception {
-    // -directlyAccessNodeLabelStore is a additional option for node label
-    // access, so just search if we have specified this option, and remove it
-    List<String> argsList = new ArrayList<String>();
-    for (int i = 0; i < args.length; i++) {
-      if (args[i].equals("-directlyAccessNodeLabelStore")) {
-        directlyAccessNodeLabelStore = true;
-      } else {
-        argsList.add(args[i]);
-      }
-    }
-    args = argsList.toArray(new String[0]);
-    
     YarnConfiguration yarnConf =
         getConf() == null ? new YarnConfiguration() : new YarnConfiguration(
             getConf());
@@ -762,29 +812,11 @@ public class RMAdminCLI extends HAAdmin {
       } else if ("-updateNodeResource".equals(cmd)) {
         exitCode = handleUpdateNodeResource(args, cmd, isHAEnabled);
       } else if ("-addToClusterNodeLabels".equals(cmd)) {
-        if (i >= args.length) {
-          System.err.println(NO_LABEL_ERR_MSG);
-          printUsage("", isHAEnabled);
-          exitCode = -1;
-        } else {
-          exitCode = addToClusterNodeLabels(args[i]);
-        }
+        exitCode = handleAddToClusterNodeLabels(args, cmd, isHAEnabled);
       } else if ("-removeFromClusterNodeLabels".equals(cmd)) {
-        if (i >= args.length) {
-          System.err.println(NO_LABEL_ERR_MSG);
-          printUsage("", isHAEnabled);
-          exitCode = -1;
-        } else {
-          exitCode = removeFromClusterNodeLabels(args[i]);
-        }
+        exitCode = handleRemoveFromClusterNodeLabels(args, cmd, isHAEnabled);
       } else if ("-replaceLabelsOnNode".equals(cmd)) {
-        if (i >= args.length) {
-          System.err.println(NO_MAPPING_ERR_MSG);
-          printUsage("", isHAEnabled);
-          exitCode = -1;
-        } else {
-          exitCode = replaceLabelsOnNodes(args[i]);
-        }
+        exitCode = handleReplaceLabelsOnNodes(args, cmd, isHAEnabled);
       } else {
         exitCode = -1;
         System.err.println(cmd.substring(1) + ": Unknown command");
@@ -822,28 +854,47 @@ public class RMAdminCLI extends HAAdmin {
 
   // A helper method to reduce the number of lines of run()
   private int handleRefreshNodes(String[] args, String cmd, boolean isHAEnabled)
-      throws IOException, YarnException {
-    if (args.length == 1) {
-      return refreshNodes();
-    } else if (args.length == 3 || args.length == 4) {
-      // if the graceful timeout specified
-      if ("-g".equals(args[1]) || "-graceful".equals(args[1])) {
-        int timeout = -1;
-        String trackingMode;
-        if (args.length == 4) {
-          timeout = validateTimeout(args[2]);
-          trackingMode = validateTrackingMode(args[3]);
-        } else {
-          trackingMode = validateTrackingMode(args[2]);
-        }
-        return refreshNodes(timeout, trackingMode);
+      throws IOException, YarnException, ParseException {
+    Options opts = new Options();
+    opts.addOption("refreshNodes", false,
+        "Refresh the hosts information at the ResourceManager.");
+    Option gracefulOpt = new Option("g", "graceful", true,
+        "Wait for timeout before marking the NodeManager as decommissioned.");
+    gracefulOpt.setOptionalArg(true);
+    opts.addOption(gracefulOpt);
+    opts.addOption("client", false,
+        "Indicates the timeout tracking should be handled by the client.");
+    opts.addOption("server", false,
+        "Indicates the timeout tracking should be handled by the RM.");
+
+    int exitCode = -1;
+    CommandLine cliParser = null;
+    try {
+      cliParser = new GnuParser().parse(opts, args);
+    } catch (MissingArgumentException ex) {
+      System.out.println("Missing argument for options");
+      printUsage(args[0], isHAEnabled);
+      return exitCode;
+    }
+
+    int timeout = -1;
+    if (cliParser.hasOption("g")) {
+      String strTimeout = cliParser.getOptionValue("g");
+      if (strTimeout != null) {
+        timeout = validateTimeout(strTimeout);
+      }
+      String trackingMode = null;
+      if (cliParser.hasOption("client")) {
+        trackingMode = "client";
+      } else if (cliParser.hasOption("server")) {
+        trackingMode = "server";
       } else {
         printUsage(cmd, isHAEnabled);
         return -1;
       }
+      return refreshNodes(timeout, trackingMode);
     } else {
-      printUsage(cmd, isHAEnabled);
-      return -1;
+      return refreshNodes();
     }
   }
 

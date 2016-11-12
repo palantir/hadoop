@@ -72,6 +72,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.htrace.core.Tracer;
 import org.apache.htrace.core.TraceScope;
 
+import com.google.common.base.Preconditions;
 import com.google.common.annotations.VisibleForTesting;
 
 import static com.google.common.base.Preconditions.checkArgument;
@@ -111,6 +112,7 @@ public abstract class FileSystem extends Configured implements Closeable {
   public static final int SHUTDOWN_HOOK_PRIORITY = 10;
 
   public static final String TRASH_PREFIX = ".Trash";
+  public static final String USER_HOME_PREFIX = "/user";
 
   /** FileSystem cache */
   static final Cache CACHE = new Cache();
@@ -1529,7 +1531,68 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   public abstract FileStatus[] listStatus(Path f) throws FileNotFoundException, 
                                                          IOException;
-    
+
+  /**
+   * Represents a batch of directory entries when iteratively listing a
+   * directory. This is a private API not meant for use by end users.
+   * <p>
+   * For internal use by FileSystem subclasses that override
+   * {@link FileSystem#listStatusBatch(Path, byte[])} to implement iterative
+   * listing.
+   */
+  @InterfaceAudience.Private
+  public static class DirectoryEntries {
+    private final FileStatus[] entries;
+    private final byte[] token;
+    private final boolean hasMore;
+
+    public DirectoryEntries(FileStatus[] entries, byte[] token, boolean
+        hasMore) {
+      this.entries = entries;
+      if (token != null) {
+        this.token = token.clone();
+      } else {
+        this.token = null;
+      }
+      this.hasMore = hasMore;
+    }
+
+    public FileStatus[] getEntries() {
+      return entries;
+    }
+
+    public byte[] getToken() {
+      return token;
+    }
+
+    public boolean hasMore() {
+      return hasMore;
+    }
+  }
+
+  /**
+   * Given an opaque iteration token, return the next batch of entries in a
+   * directory. This is a private API not meant for use by end users.
+   * <p>
+   * This method should be overridden by FileSystem subclasses that want to
+   * use the generic {@link FileSystem#listStatusIterator(Path)} implementation.
+   * @param f Path to list
+   * @param token opaque iteration token returned by previous call, or null
+   *              if this is the first call.
+   * @return
+   * @throws FileNotFoundException
+   * @throws IOException
+   */
+  @InterfaceAudience.Private
+  protected DirectoryEntries listStatusBatch(Path f, byte[] token) throws
+      FileNotFoundException, IOException {
+    // The default implementation returns the entire listing as a single batch.
+    // Thus, there is never a second batch, and no need to respect the passed
+    // token or set a token in the returned DirectoryEntries.
+    FileStatus[] listing = listStatus(f);
+    return new DirectoryEntries(listing, null, false);
+  }
+
   /*
    * Filter files/directories in the given path using the user-supplied path
    * filter. Results are added to the given array <code>results</code>.
@@ -1767,6 +1830,49 @@ public abstract class FileSystem extends Configured implements Closeable {
   }
 
   /**
+   * Generic iterator for implementing {@link #listStatusIterator(Path)}.
+   */
+  private class DirListingIterator<T extends FileStatus> implements
+      RemoteIterator<T> {
+
+    private final Path path;
+    private DirectoryEntries entries;
+    private int i = 0;
+
+    DirListingIterator(Path path) {
+      this.path = path;
+    }
+
+    @Override
+    public boolean hasNext() throws IOException {
+      if (entries == null) {
+        fetchMore();
+      }
+      return i < entries.getEntries().length ||
+          entries.hasMore();
+    }
+
+    private void fetchMore() throws IOException {
+      byte[] token = null;
+      if (entries != null) {
+        token = entries.getToken();
+      }
+      entries = listStatusBatch(path, token);
+      i = 0;
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public T next() throws IOException {
+      Preconditions.checkState(hasNext(), "No more items in iterator");
+      if (i == entries.getEntries().length) {
+        fetchMore();
+      }
+      return (T)entries.getEntries()[i++];
+    }
+  }
+
+  /**
    * Returns a remote iterator so that followup calls are made on demand
    * while consuming the entries. Each file system implementation should
    * override this method and provide a more efficient implementation, if
@@ -1779,23 +1885,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   public RemoteIterator<FileStatus> listStatusIterator(final Path p)
   throws FileNotFoundException, IOException {
-    return new RemoteIterator<FileStatus>() {
-      private final FileStatus[] stats = listStatus(p);
-      private int i = 0;
-
-      @Override
-      public boolean hasNext() {
-        return i<stats.length;
-      }
-
-      @Override
-      public FileStatus next() throws IOException {
-        if (!hasNext()) {
-          throw new NoSuchElementException("No more entry in " + p);
-        }
-        return stats[i++];
-      }
-    };
+    return new DirListingIterator<>(p);
   }
 
   /**
@@ -1874,7 +1964,7 @@ public abstract class FileSystem extends Configured implements Closeable {
    */
   public Path getHomeDirectory() {
     return this.makeQualified(
-        new Path("/user/"+System.getProperty("user.name")));
+        new Path(USER_HOME_PREFIX + "/" + System.getProperty("user.name")));
   }
 
 
@@ -2769,7 +2859,15 @@ public abstract class FileSystem extends Configured implements Closeable {
                   ClassUtil.findContainingJar(fs.getClass()), e);
             }
           } catch (ServiceConfigurationError ee) {
-            LOG.warn("Cannot load filesystem", ee);
+            LOG.warn("Cannot load filesystem: " + ee);
+            Throwable cause = ee.getCause();
+            // print all the nested exception messages
+            while (cause != null) {
+              LOG.warn(cause.toString());
+              cause = cause.getCause();
+            }
+            // and at debug: the full stack
+            LOG.debug("Stack Trace", ee);
           }
         }
         FILE_SYSTEMS_LOADED = true;
@@ -2855,7 +2953,8 @@ public abstract class FileSystem extends Configured implements Closeable {
         }
         fs.key = key;
         map.put(key, fs);
-        if (conf.getBoolean("fs.automatic.close", true)) {
+        if (conf.getBoolean(
+            FS_AUTOMATIC_CLOSE_KEY, FS_AUTOMATIC_CLOSE_DEFAULT)) {
           toAutoClose.add(key);
         }
         return fs;

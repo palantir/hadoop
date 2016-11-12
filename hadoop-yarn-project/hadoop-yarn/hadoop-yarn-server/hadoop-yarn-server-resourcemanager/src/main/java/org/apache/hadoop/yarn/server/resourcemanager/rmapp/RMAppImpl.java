@@ -56,6 +56,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
+import org.apache.hadoop.yarn.api.records.ApplicationTimeoutType;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.LogAggregationStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -119,6 +120,9 @@ public class RMAppImpl implements RMApp, Recoverable {
 
   private static final Log LOG = LogFactory.getLog(RMAppImpl.class);
   private static final String UNAVAILABLE = "N/A";
+  private static final EnumSet<RMAppState> COMPLETED_APP_STATES =
+      EnumSet.of(RMAppState.FINISHED, RMAppState.FINISHING, RMAppState.FAILED,
+          RMAppState.KILLED, RMAppState.FINAL_SAVING, RMAppState.KILLING);
 
   // Immutable fields
   private final ApplicationId applicationId;
@@ -176,6 +180,8 @@ public class RMAppImpl implements RMApp, Recoverable {
   private Map<NodeId, List<String>> logAggregationFailureMessagesForNMs =
       new HashMap<NodeId, List<String>>();
   private final int maxLogAggregationDiagnosticsInMemory;
+  private Map<ApplicationTimeoutType, Long> applicationTimeouts =
+      new HashMap<ApplicationTimeoutType, Long>();
 
   // These states stored are only valid when app is at killing or final_saving.
   private RMAppState stateBeforeKilling;
@@ -494,6 +500,8 @@ public class RMAppImpl implements RMApp, Recoverable {
             DEFAULT_AM_SCHEDULING_NODE_BLACKLISTING_DISABLE_THRESHOLD;
       }
     }
+
+
   }
 
   @Override
@@ -682,6 +690,12 @@ public class RMAppImpl implements RMApp, Recoverable {
         RMAppMetrics rmAppMetrics = getRMAppMetrics();
         appUsageReport.setMemorySeconds(rmAppMetrics.getMemorySeconds());
         appUsageReport.setVcoreSeconds(rmAppMetrics.getVcoreSeconds());
+        appUsageReport.
+            setPreemptedMemorySeconds(rmAppMetrics.
+                getPreemptedMemorySeconds());
+        appUsageReport.
+            setPreemptedVcoreSeconds(rmAppMetrics.
+                getPreemptedVcoreSeconds());
       }
 
       if (currentApplicationAttemptId == null) {
@@ -827,6 +841,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.storedFinishTime = appState.getFinishTime();
     this.startTime = appState.getStartTime();
     this.callerContext = appState.getCallerContext();
+    this.applicationTimeouts = appState.getApplicationTimeouts();
     // If interval > 0, some attempts might have been deleted.
     if (this.attemptFailuresValidityInterval > 0) {
       this.firstAttemptIdInStateStore = appState.getFirstAttemptId();
@@ -973,7 +988,7 @@ public class RMAppImpl implements RMApp, Recoverable {
       }
 
       app.rmContext.getSystemMetricsPublisher().appUpdated(app,
-          System.currentTimeMillis());
+          app.systemClock.getTime());
 
       // TODO: Write out change to state store (YARN-1558)
       // Also take care of RM failover
@@ -1018,6 +1033,19 @@ public class RMAppImpl implements RMApp, Recoverable {
               + e.getMessage();
           app.diagnostics.append(msg);
           LOG.error(msg, e);
+        }
+      }
+
+      for (Map.Entry<ApplicationTimeoutType, Long> timeout :
+        app.applicationTimeouts.entrySet()) {
+        app.rmContext.getRMAppLifetimeMonitor().registerApp(app.applicationId,
+            timeout.getKey(), timeout.getValue());
+        if (LOG.isDebugEnabled()) {
+          long remainingTime = timeout.getValue() - app.systemClock.getTime();
+          LOG.debug("Application " + app.applicationId
+              + " is registered for timeout monitor, type=" + timeout.getKey()
+              + " remaining timeout="
+              + (remainingTime > 0 ? remainingTime / 1000 : 0) + " seconds");
         }
       }
 
@@ -1067,6 +1095,13 @@ public class RMAppImpl implements RMApp, Recoverable {
 
     @Override
     public RMAppState transition(RMAppImpl app, RMAppEvent event) {
+      Map<ApplicationTimeoutType, Long> timeouts =
+          app.submissionContext.getApplicationTimeouts();
+      if (timeouts != null && timeouts.size() > 0) {
+        app.rmContext.getRMAppLifetimeMonitor()
+            .unregisterApp(app.getApplicationId(), timeouts.keySet());
+      }
+
       if (app.transitionTodo instanceof SingleArcTransition) {
         ((SingleArcTransition) app.transitionTodo).transition(app,
           app.eventCausingFinalSaving);
@@ -1075,7 +1110,6 @@ public class RMAppImpl implements RMApp, Recoverable {
           app.eventCausingFinalSaving);
       }
       return app.targetedFinalState;
-
     }
   }
 
@@ -1123,6 +1157,25 @@ public class RMAppImpl implements RMApp, Recoverable {
   private static final class RMAppNewlySavingTransition extends RMAppTransition {
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
+
+      long applicationLifetime =
+          app.getApplicationLifetime(ApplicationTimeoutType.LIFETIME);
+      if (applicationLifetime > 0) {
+        // calculate next timeout value
+        Long newTimeout =
+            Long.valueOf(app.submitTime + (applicationLifetime * 1000));
+        app.rmContext.getRMAppLifetimeMonitor().registerApp(app.applicationId,
+            ApplicationTimeoutType.LIFETIME, newTimeout);
+
+        // update applicationTimeouts with new absolute value.
+        app.applicationTimeouts.put(ApplicationTimeoutType.LIFETIME,
+            newTimeout);
+
+        LOG.info("Application " + app.applicationId
+            + " is registered for timeout monitor, type="
+            + ApplicationTimeoutType.LIFETIME + " value=" + applicationLifetime
+            + " seconds");
+      }
 
       // If recovery is enabled then store the application information in a
       // non-blocking call so make sure that RM has stored the information
@@ -1172,6 +1225,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         ApplicationStateData.newInstance(this.submitTime, this.startTime,
             this.user, this.submissionContext,
             stateToBeStored, diags, this.storedFinishTime, this.callerContext);
+    appState.setApplicationTimeouts(this.applicationTimeouts);
     this.rmContext.getStateStore().updateApplicationState(appState);
   }
 
@@ -1497,6 +1551,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     int numNonAMContainerPreempted = 0;
     long memorySeconds = 0;
     long vcoreSeconds = 0;
+    long preemptedMemorySeconds = 0;
+    long preemptedVcoreSeconds = 0;
     for (RMAppAttempt attempt : attempts.values()) {
       if (null != attempt) {
         RMAppAttemptMetrics attemptMetrics =
@@ -1512,12 +1568,15 @@ public class RMAppImpl implements RMApp, Recoverable {
             attempt.getRMAppAttemptMetrics().getAggregateAppResourceUsage();
         memorySeconds += resUsage.getMemorySeconds();
         vcoreSeconds += resUsage.getVcoreSeconds();
+        preemptedMemorySeconds += attemptMetrics.getPreemptedMemory();
+        preemptedVcoreSeconds += attemptMetrics.getPreemptedVcore();
       }
     }
 
     return new RMAppMetrics(resourcePreempted,
         numNonAMContainerPreempted, numAMContainerPreempted,
-        memorySeconds, vcoreSeconds);
+        memorySeconds, vcoreSeconds,
+        preemptedMemorySeconds, preemptedVcoreSeconds);
   }
 
   @Private
@@ -1836,5 +1895,42 @@ public class RMAppImpl implements RMApp, Recoverable {
   @VisibleForTesting
   public int getNextAttemptId() {
     return nextAttemptId;
+  }
+
+  private long getApplicationLifetime(ApplicationTimeoutType type) {
+    Map<ApplicationTimeoutType, Long> timeouts =
+        this.submissionContext.getApplicationTimeouts();
+    long applicationLifetime = -1;
+    if (timeouts != null && timeouts.containsKey(type)) {
+      applicationLifetime = timeouts.get(type);
+    }
+    return applicationLifetime;
+  }
+
+  @Override
+  public Map<ApplicationTimeoutType, Long> getApplicationTimeouts() {
+    this.readLock.lock();
+    try {
+      return new HashMap(this.applicationTimeouts);
+    } finally {
+      this.readLock.unlock();
+    }
+  }
+
+  public void updateApplicationTimeout(
+      Map<ApplicationTimeoutType, Long> updateTimeout) {
+    this.writeLock.lock();
+    try {
+      if (COMPLETED_APP_STATES.contains(getState())) {
+        return;
+      }
+      // update monitoring service
+      this.rmContext.getRMAppLifetimeMonitor()
+          .updateApplicationTimeouts(getApplicationId(), updateTimeout);
+      this.applicationTimeouts.putAll(updateTimeout);
+
+    } finally {
+      this.writeLock.unlock();
+    }
   }
 }

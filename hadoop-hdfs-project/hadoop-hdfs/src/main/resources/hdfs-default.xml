@@ -536,6 +536,13 @@
 </property>
 
 <property>
+  <name>dfs.namenode.maintenance.replication.min</name>
+  <value>1</value>
+  <description>Minimal live block replication in existence of maintenance mode.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.safemode.replication.min</name>
   <value></value>
   <description>
@@ -707,7 +714,7 @@
 
   Setting this limit to 1000 disables compiler thread throttling. Only
   values between 1 and 1000 are valid. Setting an invalid value will result
-  in the throttle being disbled and an error message being logged. 1000 is
+  in the throttle being disabled and an error message being logged. 1000 is
   the default setting.
   </description>
 </property>
@@ -816,8 +823,9 @@
   <name>dfs.namenode.safemode.extension</name>
   <value>30000</value>
   <description>
-    Determines extension of safe mode in milliseconds 
-    after the threshold level is reached.
+    Determines extension of safe mode in milliseconds after the threshold level
+    is reached.  Support multiple time unit suffix (case insensitive), as
+    described in dfs.heartbeat.interval.
   </description>
 </property>
 
@@ -2533,7 +2541,7 @@
   <name>dfs.block.local-path-access.user</name>
   <value></value>
   <description>
-    Comma separated list of the users allowd to open block files
+    Comma separated list of the users allowed to open block files
     on legacy short-circuit local read.
   </description>
 </property>
@@ -2627,6 +2635,24 @@
 </property>
 
 <property>
+  <name>dfs.namenode.write-lock-reporting-threshold-ms</name>
+  <value>1000</value>
+  <description>When a write lock is held on the namenode for a long time,
+    this will be logged as the lock is released. This sets how long the
+    lock must be held for logging to occur.
+  </description>
+</property>
+
+<property>
+  <name>dfs.namenode.read-lock-reporting-threshold-ms</name>
+  <value>5000</value>
+  <description>When a read lock is held on the namenode for a long time,
+    this will be logged as the lock is released. This sets how long the
+    lock must be held for logging to occur.
+  </description>
+</property>
+
+<property>
   <name>dfs.namenode.startup.delay.block.deletion.sec</name>
   <value>0</value>
   <description>The delay in seconds at which we will pause the blocks deletion
@@ -2710,14 +2736,6 @@
   <description>The number of threads to use when creating hard links from
     current to previous blocks during upgrade of a DataNode to block ID-based
     block layout (see HDFS-6482 for details on the layout).</description>
-</property>
-
-<property>
-  <name>dfs.encryption.key.provider.uri</name>
-  <description>
-    The KeyProvider to use when interacting with encryption keys used
-    when reading and writing to an encryption zone.
-  </description>
 </property>
 
 <property>
@@ -3101,6 +3119,21 @@
 </property>
 
 <property>
+  <name>dfs.balancer.block-move.timeout</name>
+  <value>0</value>
+  <description>
+    Maximum amount of time in milliseconds for a block to move. If this is set
+    greater than 0, Balancer will stop waiting for a block move completion
+    after this time. In typical clusters, a 3 to 5 minute timeout is reasonable.
+    If timeout happens to a large proportion of block moves, this needs to be
+    increased. It could also be that too much work is dispatched and many nodes
+    are constantly exceeding the bandwidth limit as a result. In that case,
+    other balancer parameters might need to be adjusted.
+    It is disabled (0) by default.
+  </description>
+</property>
+
+<property>
   <name>dfs.block.invalidate.limit</name>
   <value>1000</value>
   <description>
@@ -3121,6 +3154,17 @@
   <value>org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault</value>
   <description>
     Class representing block placement policy for non-striped files.
+    There are four block placement policies currently being supported:
+    BlockPlacementPolicyDefault, BlockPlacementPolicyWithNodeGroup,
+    BlockPlacementPolicyRackFaultTolerant and BlockPlacementPolicyWithUpgradeDomain.
+    BlockPlacementPolicyDefault chooses the desired number of targets
+    for placing block replicas in a default way. BlockPlacementPolicyWithNodeGroup
+    places block replicas on environment with node-group layer. BlockPlacementPolicyRackFaultTolerant
+    places the replicas to more racks.
+    BlockPlacementPolicyWithUpgradeDomain places block replicas that honors upgrade domain policy.
+    The details of placing replicas are documented in the javadoc of the corresponding policy classes.
+    The default policy is BlockPlacementPolicyDefault, and the corresponding class is
+    org.apache.hadoop.hdfs.server.blockmanagement.BlockPlacementPolicyDefault.
   </description>
 </property>
 
@@ -3522,7 +3566,7 @@
   <name>dfs.datanode.transferTo.allowed</name>
   <value>true</value>
   <description>
-    If false, break block tranfers on 32-bit machines greater than
+    If false, break block transfers on 32-bit machines greater than
     or equal to 2GB into smaller chunks.
   </description>
 </property>
@@ -4076,4 +4120,26 @@
     Truststore password for HTTPS SSL configuration
   </description>
 </property>
+
+<property>
+  <name>dfs.lock.suppress.warning.interval</name>
+  <value>10s</value>
+  <description>Instrumentation reporting long critical sections will suppress
+    consecutive warnings within this interval.</description>
+</property>
+
+  <property>
+    <name>dfs.webhdfs.use.ipc.callq</name>
+    <value>true</value>
+    <description>Enables routing of webhdfs calls through rpc
+      call queue</description>
+  </property>
+
+  <property>
+    <name>httpfs.buffer.size</name>
+    <value>4096</value>
+    <description>
+    The size buffer to be used when creating or opening httpfs filesystem IO stream.
+    </description>
+  </property>
 </configuration>

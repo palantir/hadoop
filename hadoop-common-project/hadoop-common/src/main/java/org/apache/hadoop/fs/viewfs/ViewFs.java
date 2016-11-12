@@ -83,7 +83,7 @@ import org.apache.hadoop.util.Time;
  * ViewFs is specified with the following URI: <b>viewfs:///</b> 
  * <p>
  * To use viewfs one would typically set the default file system in the
- * config  (i.e. fs.default.name< = viewfs:///) along with the
+ * config  (i.e. fs.defaultFS < = viewfs:///) along with the
  * mount table config variables as described below. 
  * 
  * <p>
@@ -472,14 +472,16 @@ public class ViewFs extends AbstractFileSystem {
   
     if (resSrc.isInternalDir()) {
       throw new AccessControlException(
-          "Cannot Rename within internal dirs of mount table: it is readOnly");
+          "Cannot Rename within internal dirs of mount table: src=" + src
+              + " is readOnly");
     }
-      
+
     InodeTree.ResolveResult<AbstractFileSystem> resDst = 
                                 fsState.resolve(getUriPath(dst), false);
     if (resDst.isInternalDir()) {
       throw new AccessControlException(
-          "Cannot Rename within internal dirs of mount table: it is readOnly");
+          "Cannot Rename within internal dirs of mount table: dest=" + dst
+              + " is readOnly");
     }
     
     /**

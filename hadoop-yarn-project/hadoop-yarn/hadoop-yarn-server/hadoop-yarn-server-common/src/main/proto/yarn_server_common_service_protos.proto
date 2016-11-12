@@ -58,6 +58,7 @@ message RegisterNodeManagerRequestProto {
   repeated NMContainerStatusProto container_statuses = 6;
   repeated ApplicationIdProto runningApplications = 7;
   optional NodeLabelsProto nodeLabels = 8;
+  optional ResourceProto physicalResource = 9;
 }
 
 message RegisterNodeManagerResponseProto {
@@ -129,6 +130,7 @@ message NMContainerStatusProto {
   optional int32 container_exit_status = 6;
   optional int64 creation_time = 7;
   optional string nodeLabelExpression = 8;
+  optional int32 version = 9;
 }
 
 message SCMUploaderNotifyRequestProto {

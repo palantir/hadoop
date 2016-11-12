@@ -19,9 +19,11 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import static org.mockito.Matchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -30,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -294,6 +297,8 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     RMApp app = rm.submitApp(2000);
     MockAM am = MockRM.launchAndRegisterAM(app, rm, nm1);
     ApplicationAttemptId aaid = app.getCurrentAppAttempt().getAppAttemptId();
+    nm1.nodeHeartbeat(aaid, 2, ContainerState.RUNNING);
+    nm3.nodeHeartbeat(true);
 
     // Graceful decommission host1 and host3
     writeToHostsFile("host1", "host3");
@@ -303,7 +308,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
 
     // host1 should be DECOMMISSIONING due to running containers.
     // host3 should become DECOMMISSIONED.
-    nm1.nodeHeartbeat(aaid, 2, ContainerState.RUNNING);
+    nm1.nodeHeartbeat(true);
     nm3.nodeHeartbeat(true);
     rm.waitForState(id1, NodeState.DECOMMISSIONING);
     rm.waitForState(id3, NodeState.DECOMMISSIONED);
@@ -1041,7 +1046,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     NMContainerStatus report =
         NMContainerStatus.newInstance(
           ContainerId.newContainerId(
-            ApplicationAttemptId.newInstance(app.getApplicationId(), 2), 1),
+            ApplicationAttemptId.newInstance(app.getApplicationId(), 2), 1), 0,
           ContainerState.COMPLETE, Resource.newInstance(1024, 1),
           "Dummy Completed", 0, Priority.newInstance(10), 1234);
     rm.getResourceTrackerService().handleNMContainerStatus(report, null);
@@ -1052,7 +1057,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
         (RMAppAttemptImpl) app.getCurrentAppAttempt();
     currentAttempt.setMasterContainer(null);
     report = NMContainerStatus.newInstance(
-          ContainerId.newContainerId(currentAttempt.getAppAttemptId(), 0),
+          ContainerId.newContainerId(currentAttempt.getAppAttemptId(), 0), 0,
           ContainerState.COMPLETE, Resource.newInstance(1024, 1),
           "Dummy Completed", 0, Priority.newInstance(10), 1234);
     rm.getResourceTrackerService().handleNMContainerStatus(report, null);
@@ -1064,7 +1069,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     // Case 2.1: AppAttemptId is null
     report = NMContainerStatus.newInstance(
           ContainerId.newContainerId(
-            ApplicationAttemptId.newInstance(app.getApplicationId(), 2), 1),
+            ApplicationAttemptId.newInstance(app.getApplicationId(), 2), 1), 0,
           ContainerState.COMPLETE, Resource.newInstance(1024, 1),
           "Dummy Completed", 0, Priority.newInstance(10), 1234);
     try {
@@ -1079,7 +1084,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
         (RMAppAttemptImpl) app.getCurrentAppAttempt();
     currentAttempt.setMasterContainer(null);
     report = NMContainerStatus.newInstance(
-      ContainerId.newContainerId(currentAttempt.getAppAttemptId(), 0),
+      ContainerId.newContainerId(currentAttempt.getAppAttemptId(), 0), 0,
       ContainerState.COMPLETE, Resource.newInstance(1024, 1),
       "Dummy Completed", 0, Priority.newInstance(10), 1234);
     try {
@@ -1913,6 +1918,59 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     MetricsSystem ms = DefaultMetricsSystem.instance();
     if (ms.getSource("ClusterMetrics") != null) {
       DefaultMetricsSystem.shutdown();
+    }
+  }
+
+  @Test(timeout = 60000)
+  public void testNodeHeartBeatResponseForUnknownContainerCleanUp()
+      throws Exception {
+    Configuration conf = new Configuration();
+    rm = new MockRM(conf);
+    rm.init(conf);
+    rm.start();
+
+    MockNM nm1 = rm.registerNode("host1:1234", 5120);
+    rm.drainEvents();
+
+    // send 1st heartbeat
+    nm1.nodeHeartbeat(true);
+
+    // Create 2 unknown containers tracked by NM
+    ApplicationId applicationId = BuilderUtils.newApplicationId(1, 1);
+    ApplicationAttemptId applicationAttemptId = BuilderUtils
+        .newApplicationAttemptId(applicationId, 1);
+    ContainerId cid1 = BuilderUtils.newContainerId(applicationAttemptId, 2);
+    ContainerId cid2 = BuilderUtils.newContainerId(applicationAttemptId, 3);
+    ArrayList<ContainerStatus> containerStats =
+        new ArrayList<ContainerStatus>();
+    containerStats.add(
+        ContainerStatus.newInstance(cid1, ContainerState.COMPLETE, "", -1));
+    containerStats.add(
+        ContainerStatus.newInstance(cid2, ContainerState.COMPLETE, "", -1));
+
+    Map<ApplicationId, List<ContainerStatus>> conts =
+        new HashMap<ApplicationId, List<ContainerStatus>>();
+    conts.put(applicationAttemptId.getApplicationId(), containerStats);
+
+    // add RMApp into context.
+    RMApp app1 = mock(RMApp.class);
+    when(app1.getApplicationId()).thenReturn(applicationId);
+    rm.getRMContext().getRMApps().put(applicationId, app1);
+
+    // Send unknown container status in heartbeat
+    nm1.nodeHeartbeat(conts, true);
+    rm.drainEvents();
+
+    int containersToBeRemovedFromNM = 0;
+    while (true) {
+      NodeHeartbeatResponse nodeHeartbeat = nm1.nodeHeartbeat(true);
+      rm.drainEvents();
+      containersToBeRemovedFromNM +=
+          nodeHeartbeat.getContainersToBeRemovedFromNM().size();
+      // asserting for 2 since two unknown containers status has been sent
+      if (containersToBeRemovedFromNM == 2) {
+        break;
+      }
     }
   }
 }

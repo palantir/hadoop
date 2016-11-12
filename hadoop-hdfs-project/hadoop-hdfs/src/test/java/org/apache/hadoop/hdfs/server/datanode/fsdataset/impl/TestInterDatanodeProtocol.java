@@ -38,6 +38,7 @@ import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.protocol.DatanodeID;
 import org.apache.hadoop.hdfs.protocol.DatanodeInfo;
+import org.apache.hadoop.hdfs.protocol.DatanodeInfo.DatanodeInfoBuilder;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlock;
 import org.apache.hadoop.hdfs.protocol.LocatedBlocks;
@@ -58,6 +59,7 @@ import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.NetUtils;
+import org.apache.hadoop.util.AutoCloseableLock;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -234,7 +236,7 @@ public class TestInterDatanodeProtocol {
     final long firstblockid = 10000L;
     final long gs = 7777L;
     final long length = 22L;
-    final ReplicaMap map = new ReplicaMap(this);
+    final ReplicaMap map = new ReplicaMap(new AutoCloseableLock());
     String bpid = "BP-TEST";
     final Block[] blocks = new Block[5];
     for(int i = 0; i < blocks.length; i++) {
@@ -399,7 +401,8 @@ public class TestInterDatanodeProtocol {
 
     final InetSocketAddress addr = NetUtils.getConnectAddress(server);
     DatanodeID fakeDnId = DFSTestUtil.getLocalDatanodeID(addr.getPort());
-    DatanodeInfo dInfo = new DatanodeInfo(fakeDnId);
+    DatanodeInfo dInfo = new DatanodeInfoBuilder().setNodeID(fakeDnId)
+        .build();
     InterDatanodeProtocol proxy = null;
 
     try {

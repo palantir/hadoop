@@ -19,6 +19,7 @@
 package org.apache.hadoop.hdfs.web;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -50,6 +51,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.fs.StorageType;
 import org.apache.hadoop.fs.permission.FsAction;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -67,6 +69,7 @@ import org.apache.hadoop.hdfs.server.namenode.web.resources.NamenodeWebHdfsMetho
 import org.apache.hadoop.hdfs.server.protocol.NamenodeProtocols;
 import org.apache.hadoop.hdfs.web.WebHdfsFileSystem.WebHdfsInputStream;
 import org.apache.hadoop.hdfs.web.resources.LengthParam;
+import org.apache.hadoop.hdfs.web.resources.NoRedirectParam;
 import org.apache.hadoop.hdfs.web.resources.OffsetParam;
 import org.apache.hadoop.hdfs.web.resources.Param;
 import org.apache.hadoop.io.retry.RetryPolicy;
@@ -78,6 +81,8 @@ import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.log4j.Level;
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
 import org.junit.Assert;
 import org.junit.Test;
 import org.mockito.internal.util.reflection.Whitebox;
@@ -296,11 +301,50 @@ public class TestWebHDFS {
                   WebHdfsConstants.WEBHDFS_SCHEME);
               Path d = new Path("/my-dir");
             Assert.assertTrue(fs.mkdirs(d));
-            for (int i=0; i < listLimit*3; i++) {
-              Path p = new Path(d, "file-"+i);
+            // Iterator should have no items when dir is empty
+            RemoteIterator<FileStatus> it = fs.listStatusIterator(d);
+            assertFalse(it.hasNext());
+            Path p = new Path(d, "file-"+0);
+            Assert.assertTrue(fs.createNewFile(p));
+            // Iterator should have an item when dir is not empty
+            it = fs.listStatusIterator(d);
+            assertTrue(it.hasNext());
+            it.next();
+            assertFalse(it.hasNext());
+            for (int i=1; i < listLimit*3; i++) {
+              p = new Path(d, "file-"+i);
               Assert.assertTrue(fs.createNewFile(p));
             }
-            Assert.assertEquals(listLimit*3, fs.listStatus(d).length);
+            // Check the FileStatus[] listing
+            FileStatus[] statuses = fs.listStatus(d);
+            Assert.assertEquals(listLimit*3, statuses.length);
+            // Check the iterator-based listing
+            GenericTestUtils.setLogLevel(WebHdfsFileSystem.LOG, Level.TRACE);
+            GenericTestUtils.setLogLevel(NamenodeWebHdfsMethods.LOG, Level
+                .TRACE);
+            it = fs.listStatusIterator(d);
+            int count = 0;
+            while (it.hasNext()) {
+              FileStatus stat = it.next();
+              assertEquals("FileStatuses not equal", statuses[count], stat);
+              count++;
+            }
+            assertEquals("Different # of statuses!", statuses.length, count);
+            // Do some more basic iterator tests
+            it = fs.listStatusIterator(d);
+            // Try advancing the iterator without calling hasNext()
+            for (int i = 0; i < statuses.length; i++) {
+              FileStatus stat = it.next();
+              assertEquals("FileStatuses not equal", statuses[i], stat);
+            }
+            assertFalse("No more items expected", it.hasNext());
+            // Try doing next when out of items
+            try {
+              it.next();
+              fail("Iterator should error if out of elements.");
+            } catch (IllegalStateException e) {
+              // pass
+            }
             return null;
           }
         });
@@ -443,9 +487,9 @@ public class TestWebHDFS {
 
       // delete the two snapshots
       webHdfs.deleteSnapshot(foo, "s1");
-      Assert.assertFalse(webHdfs.exists(s1path));
+      assertFalse(webHdfs.exists(s1path));
       webHdfs.deleteSnapshot(foo, spath.getName());
-      Assert.assertFalse(webHdfs.exists(spath));
+      assertFalse(webHdfs.exists(spath));
     } finally {
       if (cluster != null) {
         cluster.shutdown();
@@ -501,12 +545,12 @@ public class TestWebHDFS {
 
       // rename s1 to s2
       webHdfs.renameSnapshot(foo, "s1", "s2");
-      Assert.assertFalse(webHdfs.exists(s1path));
+      assertFalse(webHdfs.exists(s1path));
       final Path s2path = SnapshotTestHelper.getSnapshotRoot(foo, "s2");
       Assert.assertTrue(webHdfs.exists(s2path));
 
       webHdfs.deleteSnapshot(foo, "s2");
-      Assert.assertFalse(webHdfs.exists(s2path));
+      assertFalse(webHdfs.exists(s2path));
     } finally {
       if (cluster != null) {
         cluster.shutdown();
@@ -776,7 +820,7 @@ public class TestWebHDFS {
     final Configuration conf = WebHdfsTestUtil.createConf();
     final Path dir = new Path("/testWebHdfsReadRetries");
 
-    conf.setBoolean(DFSConfigKeys.DFS_CLIENT_RETRY_POLICY_ENABLED_KEY, true);
+    conf.setBoolean(HdfsClientConfigKeys.Retry.POLICY_ENABLED_KEY, true);
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_SAFEMODE_MIN_DATANODES_KEY, 1);
     conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY, 1024*512);
     conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY, 1);
@@ -906,5 +950,106 @@ public class TestWebHDFS {
     verify(rr, times(numTimesTried)).getResponse((HttpURLConnection) any());
     webIn.close();
     in.close();
+  }
+
+  private void checkResponseContainsLocation(URL url, String TYPE)
+    throws JSONException, IOException {
+    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+    conn.setRequestMethod(TYPE);
+    conn.setInstanceFollowRedirects(false);
+    String response = IOUtils.toString(conn.getInputStream());
+    LOG.info("Response was : " + response);
+    Assert.assertEquals(
+      "Response wasn't " + HttpURLConnection.HTTP_OK,
+      HttpURLConnection.HTTP_OK, conn.getResponseCode());
+
+    JSONObject responseJson = new JSONObject(response);
+    Assert.assertTrue("Response didn't give us a location. " + response,
+      responseJson.has("Location"));
+
+    //Test that the DN allows CORS on Create
+    if(TYPE.equals("CREATE")) {
+      URL dnLocation = new URL(responseJson.getString("Location"));
+      HttpURLConnection dnConn = (HttpURLConnection) dnLocation.openConnection();
+      dnConn.setRequestMethod("OPTIONS");
+      Assert.assertEquals("Datanode url : " + dnLocation + " didn't allow "
+        + "CORS", HttpURLConnection.HTTP_OK, dnConn.getResponseCode());
+    }
+  }
+
+  @Test
+  /**
+   * Test that when "&noredirect=true" is added to operations CREATE, APPEND,
+   * OPEN, and GETFILECHECKSUM the response (which is usually a 307 temporary
+   * redirect) is a 200 with JSON that contains the redirected location
+   */
+  public void testWebHdfsNoRedirect() throws Exception {
+    MiniDFSCluster cluster = null;
+    final Configuration conf = WebHdfsTestUtil.createConf();
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+      LOG.info("Started cluster");
+      InetSocketAddress addr = cluster.getNameNode().getHttpAddress();
+
+      URL url = new URL("http", addr.getHostString(), addr.getPort(),
+        WebHdfsFileSystem.PATH_PREFIX + "/testWebHdfsNoRedirectCreate" +
+        "?op=CREATE" + Param.toSortedString("&", new NoRedirectParam(true)));
+      LOG.info("Sending create request " + url);
+      checkResponseContainsLocation(url, "PUT");
+
+      //Write a file that we can read
+      final WebHdfsFileSystem fs = WebHdfsTestUtil.getWebHdfsFileSystem(
+        conf, WebHdfsConstants.WEBHDFS_SCHEME);
+      final String PATH = "/testWebHdfsNoRedirect";
+      byte[] CONTENTS = new byte[1024];
+      RANDOM.nextBytes(CONTENTS);
+      try (OutputStream os = fs.create(new Path(PATH))) {
+        os.write(CONTENTS);
+      }
+      url = new URL("http", addr.getHostString(), addr.getPort(),
+        WebHdfsFileSystem.PATH_PREFIX + "/testWebHdfsNoRedirect" +
+        "?op=OPEN" + Param.toSortedString("&", new NoRedirectParam(true)));
+      LOG.info("Sending open request " + url);
+      checkResponseContainsLocation(url, "GET");
+
+      url = new URL("http", addr.getHostString(), addr.getPort(),
+        WebHdfsFileSystem.PATH_PREFIX + "/testWebHdfsNoRedirect" +
+        "?op=GETFILECHECKSUM" + Param.toSortedString(
+        "&", new NoRedirectParam(true)));
+      LOG.info("Sending getfilechecksum request " + url);
+      checkResponseContainsLocation(url, "GET");
+
+      url = new URL("http", addr.getHostString(), addr.getPort(),
+        WebHdfsFileSystem.PATH_PREFIX + "/testWebHdfsNoRedirect" +
+        "?op=APPEND" + Param.toSortedString("&", new NoRedirectParam(true)));
+      LOG.info("Sending append request " + url);
+      checkResponseContainsLocation(url, "POST");
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
+  }
+
+  @Test
+  public void testGetTrashRoot() throws Exception {
+    MiniDFSCluster cluster = null;
+    final Configuration conf = WebHdfsTestUtil.createConf();
+    final String currentUser =
+        UserGroupInformation.getCurrentUser().getShortUserName();
+    try {
+      cluster = new MiniDFSCluster.Builder(conf).numDataNodes(0).build();
+      final WebHdfsFileSystem webFS = WebHdfsTestUtil.getWebHdfsFileSystem(
+          conf, WebHdfsConstants.WEBHDFS_SCHEME);
+
+      Path trashPath = webFS.getTrashRoot(new Path("/"));
+      Path expectedPath = new Path(FileSystem.USER_HOME_PREFIX,
+          new Path(currentUser, FileSystem.TRASH_PREFIX));
+      assertEquals(expectedPath.toUri().getPath(), trashPath.toUri().getPath());
+    } finally {
+      if (cluster != null) {
+        cluster.shutdown();
+      }
+    }
   }
 }

@@ -43,6 +43,7 @@ import static org.apache.hadoop.hdfs.DFSUtilClient.percent2String;
 public class DatanodeInfo extends DatanodeID implements Node {
   private long capacity;
   private long dfsUsed;
+  private long nonDfsUsed;
   private long remaining;
   private long blockPoolUsed;
   private long cacheCapacity;
@@ -83,11 +84,13 @@ public class DatanodeInfo extends DatanodeID implements Node {
   }
 
   protected AdminStates adminState;
+  private long maintenanceExpireTimeInMS;
 
-  public DatanodeInfo(DatanodeInfo from) {
+  protected DatanodeInfo(DatanodeInfo from) {
     super(from);
     this.capacity = from.getCapacity();
     this.dfsUsed = from.getDfsUsed();
+    this.nonDfsUsed = from.getNonDfsUsed();
     this.remaining = from.getRemaining();
     this.blockPoolUsed = from.getBlockPoolUsed();
     this.cacheCapacity = from.getCacheCapacity();
@@ -100,10 +103,11 @@ public class DatanodeInfo extends DatanodeID implements Node {
     this.upgradeDomain = from.getUpgradeDomain();
   }
 
-  public DatanodeInfo(DatanodeID nodeID) {
+  protected DatanodeInfo(DatanodeID nodeID) {
     super(nodeID);
     this.capacity = 0L;
     this.dfsUsed = 0L;
+    this.nonDfsUsed = 0L;
     this.remaining = 0L;
     this.blockPoolUsed = 0L;
     this.cacheCapacity = 0L;
@@ -114,53 +118,25 @@ public class DatanodeInfo extends DatanodeID implements Node {
     this.adminState = null;
   }
 
-  public DatanodeInfo(DatanodeID nodeID, String location) {
+  protected DatanodeInfo(DatanodeID nodeID, String location) {
     this(nodeID);
     this.location = location;
   }
 
-  public DatanodeInfo(DatanodeID nodeID, String location,
-      final long capacity, final long dfsUsed, final long remaining,
-      final long blockPoolUsed, final long cacheCapacity, final long cacheUsed,
-      final long lastUpdate, final long lastUpdateMonotonic,
-      final int xceiverCount, final AdminStates adminState,
-      final String upgradeDomain) {
-    this(nodeID.getIpAddr(), nodeID.getHostName(), nodeID.getDatanodeUuid(),
-        nodeID.getXferPort(), nodeID.getInfoPort(), nodeID.getInfoSecurePort(),
-        nodeID.getIpcPort(), capacity, dfsUsed, remaining, blockPoolUsed,
-        cacheCapacity, cacheUsed, lastUpdate, lastUpdateMonotonic,
-        xceiverCount, location, adminState, upgradeDomain);
-  }
-
-  /** Constructor */
-  public DatanodeInfo(final String ipAddr, final String hostName,
+  /** Constructor. */
+  private DatanodeInfo(final String ipAddr, final String hostName,
       final String datanodeUuid, final int xferPort, final int infoPort,
-      final int infoSecurePort, final int ipcPort,
-      final long capacity, final long dfsUsed, final long remaining,
+      final int infoSecurePort, final int ipcPort, final long capacity,
+      final long dfsUsed, final long nonDfsUsed, final long remaining,
       final long blockPoolUsed, final long cacheCapacity, final long cacheUsed,
       final long lastUpdate, final long lastUpdateMonotonic,
       final int xceiverCount, final String networkLocation,
-      final AdminStates adminState) {
-    this(ipAddr, hostName, datanodeUuid, xferPort, infoPort, infoSecurePort,
-        ipcPort, capacity, dfsUsed, remaining, blockPoolUsed, cacheCapacity,
-        cacheUsed, lastUpdate, lastUpdateMonotonic, xceiverCount,
-        networkLocation, adminState, null);
-  }
-
-  /** Constructor */
-  public DatanodeInfo(final String ipAddr, final String hostName,
-      final String datanodeUuid, final int xferPort, final int infoPort,
-      final int infoSecurePort, final int ipcPort,
-      final long capacity, final long dfsUsed, final long remaining,
-      final long blockPoolUsed, final long cacheCapacity, final long cacheUsed,
-      final long lastUpdate, final long lastUpdateMonotonic,
-      final int xceiverCount, final String networkLocation,
-      final AdminStates adminState,
-      final String upgradeDomain) {
-    super(ipAddr, hostName, datanodeUuid, xferPort, infoPort,
-            infoSecurePort, ipcPort);
+      final AdminStates adminState, final String upgradeDomain) {
+    super(ipAddr, hostName, datanodeUuid, xferPort, infoPort, infoSecurePort,
+        ipcPort);
     this.capacity = capacity;
     this.dfsUsed = dfsUsed;
+    this.nonDfsUsed = nonDfsUsed;
     this.remaining = remaining;
     this.blockPoolUsed = blockPoolUsed;
     this.cacheCapacity = cacheCapacity;
@@ -173,7 +149,7 @@ public class DatanodeInfo extends DatanodeID implements Node {
     this.upgradeDomain = upgradeDomain;
   }
 
-  /** Network location name */
+  /** Network location name. */
   @Override
   public String getName() {
     return getXferAddr();
@@ -190,8 +166,7 @@ public class DatanodeInfo extends DatanodeID implements Node {
 
   /** The used space by the data node. */
   public long getNonDfsUsed() {
-    long nonDFSUsed = capacity - dfsUsed - remaining;
-    return nonDFSUsed < 0 ? 0 : nonDFSUsed;
+    return nonDfsUsed;
   }
 
   /** The used space by the data node as percentage of present capacity */
@@ -279,6 +254,11 @@ public class DatanodeInfo extends DatanodeID implements Node {
   /** Sets the used space for the datanode. */
   public void setDfsUsed(long dfsUsed) {
     this.dfsUsed = dfsUsed;
+  }
+
+  /** Sets the nondfs-used space for the datanode. */
+  public void setNonDfsUsed(long nonDfsUsed) {
+    this.nonDfsUsed = nonDfsUsed;
   }
 
   /** Sets raw free space. */
@@ -497,17 +477,28 @@ public class DatanodeInfo extends DatanodeID implements Node {
   }
 
   /**
-   * Put a node to maintenance mode.
+   * Start the maintenance operation.
    */
   public void startMaintenance() {
-    adminState = AdminStates.ENTERING_MAINTENANCE;
+    this.adminState = AdminStates.ENTERING_MAINTENANCE;
   }
 
   /**
-   * Put a node to maintenance mode.
+   * Put a node directly to maintenance mode.
    */
   public void setInMaintenance() {
-    adminState = AdminStates.IN_MAINTENANCE;
+    this.adminState = AdminStates.IN_MAINTENANCE;
+  }
+
+  /**
+  * @param maintenanceExpireTimeInMS the time that the DataNode is in the
+  *        maintenance mode until in the unit of milliseconds.   */
+  public void setMaintenanceExpireTimeInMS(long maintenanceExpireTimeInMS) {
+    this.maintenanceExpireTimeInMS = maintenanceExpireTimeInMS;
+  }
+
+  public long getMaintenanceExpireTimeInMS() {
+    return this.maintenanceExpireTimeInMS;
   }
 
   /**
@@ -517,6 +508,9 @@ public class DatanodeInfo extends DatanodeID implements Node {
     adminState = null;
   }
 
+  public static boolean maintenanceNotExpired(long maintenanceExpireTimeInMS) {
+    return Time.monotonicNow() < maintenanceExpireTimeInMS;
+  }
   /**
    * Returns true if the node is is entering_maintenance
    */
@@ -537,6 +531,10 @@ public class DatanodeInfo extends DatanodeID implements Node {
   public boolean isMaintenance() {
     return (adminState == AdminStates.ENTERING_MAINTENANCE ||
         adminState == AdminStates.IN_MAINTENANCE);
+  }
+
+  public boolean maintenanceExpired() {
+    return !maintenanceNotExpired(this.maintenanceExpireTimeInMS);
   }
 
   public boolean isInService() {
@@ -617,5 +615,170 @@ public class DatanodeInfo extends DatanodeID implements Node {
 
   public void setSoftwareVersion(String softwareVersion) {
     this.softwareVersion = softwareVersion;
+  }
+
+  /**
+   * Building the DataNodeInfo.
+   */
+  public static class DatanodeInfoBuilder {
+    private String location = NetworkTopology.DEFAULT_RACK;
+    private long capacity;
+    private long dfsUsed;
+    private long remaining;
+    private long blockPoolUsed;
+    private long cacheCapacity;
+    private long cacheUsed;
+    private long lastUpdate;
+    private long lastUpdateMonotonic;
+    private int xceiverCount;
+    private DatanodeInfo.AdminStates adminState;
+    private String upgradeDomain;
+    private String ipAddr;
+    private String hostName;
+    private String datanodeUuid;
+    private int xferPort;
+    private int infoPort;
+    private int infoSecurePort;
+    private int ipcPort;
+    private long nonDfsUsed = 0L;
+
+    public DatanodeInfoBuilder setFrom(DatanodeInfo from) {
+      this.capacity = from.getCapacity();
+      this.dfsUsed = from.getDfsUsed();
+      this.nonDfsUsed = from.getNonDfsUsed();
+      this.remaining = from.getRemaining();
+      this.blockPoolUsed = from.getBlockPoolUsed();
+      this.cacheCapacity = from.getCacheCapacity();
+      this.cacheUsed = from.getCacheUsed();
+      this.lastUpdate = from.getLastUpdate();
+      this.lastUpdateMonotonic = from.getLastUpdateMonotonic();
+      this.xceiverCount = from.getXceiverCount();
+      this.location = from.getNetworkLocation();
+      this.adminState = from.getAdminState();
+      this.upgradeDomain = from.getUpgradeDomain();
+      setNodeID(from);
+      return this;
+    }
+
+    public DatanodeInfoBuilder setNodeID(DatanodeID nodeID) {
+      this.ipAddr = nodeID.getIpAddr();
+      this.hostName = nodeID.getHostName();
+      this.datanodeUuid = nodeID.getDatanodeUuid();
+      this.xferPort = nodeID.getXferPort();
+      this.infoPort = nodeID.getInfoPort();
+      this.infoSecurePort = nodeID.getInfoSecurePort();
+      this.ipcPort = nodeID.getIpcPort();
+      return this;
+    }
+
+    public DatanodeInfoBuilder setCapacity(long capacity) {
+      this.capacity = capacity;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setDfsUsed(long dfsUsed) {
+      this.dfsUsed = dfsUsed;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setRemaining(long remaining) {
+      this.remaining = remaining;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setBlockPoolUsed(long blockPoolUsed) {
+      this.blockPoolUsed = blockPoolUsed;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setCacheCapacity(long cacheCapacity) {
+      this.cacheCapacity = cacheCapacity;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setCacheUsed(long cacheUsed) {
+      this.cacheUsed = cacheUsed;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setLastUpdate(long lastUpdate) {
+      this.lastUpdate = lastUpdate;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setLastUpdateMonotonic(
+        long lastUpdateMonotonic) {
+      this.lastUpdateMonotonic = lastUpdateMonotonic;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setXceiverCount(int xceiverCount) {
+      this.xceiverCount = xceiverCount;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setAdminState(
+        DatanodeInfo.AdminStates adminState) {
+      this.adminState = adminState;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setUpgradeDomain(String upgradeDomain) {
+      this.upgradeDomain = upgradeDomain;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setIpAddr(String ipAddr) {
+      this.ipAddr = ipAddr;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setHostName(String hostName) {
+      this.hostName = hostName;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setDatanodeUuid(String datanodeUuid) {
+      this.datanodeUuid = datanodeUuid;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setXferPort(int xferPort) {
+      this.xferPort = xferPort;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setInfoPort(int infoPort) {
+      this.infoPort = infoPort;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setInfoSecurePort(int infoSecurePort) {
+      this.infoSecurePort = infoSecurePort;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setIpcPort(int ipcPort) {
+      this.ipcPort = ipcPort;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setNetworkLocation(String networkLocation) {
+      this.location = networkLocation;
+      return this;
+    }
+
+    public DatanodeInfoBuilder setNonDfsUsed(long nonDfsUsed) {
+      this.nonDfsUsed = nonDfsUsed;
+      return this;
+    }
+
+    public DatanodeInfo build() {
+      return new DatanodeInfo(ipAddr, hostName, datanodeUuid, xferPort,
+          infoPort, infoSecurePort, ipcPort, capacity, dfsUsed, nonDfsUsed,
+          remaining, blockPoolUsed, cacheCapacity, cacheUsed, lastUpdate,
+          lastUpdateMonotonic, xceiverCount, location, adminState,
+          upgradeDomain);
+    }
   }
 }

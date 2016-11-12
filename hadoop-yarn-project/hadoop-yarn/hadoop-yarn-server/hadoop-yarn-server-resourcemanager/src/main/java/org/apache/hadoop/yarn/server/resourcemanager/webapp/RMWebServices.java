@@ -130,11 +130,17 @@ import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.NodeLabelsUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.activities.ActivitiesManager;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CSQueue;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fifo.FifoScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ActivitiesInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppActivitiesInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppAttemptInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppAttemptsInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.AppInfo;
@@ -577,6 +583,124 @@ public class RMWebServices extends WebServices {
   }
 
   @GET
+  @Path("/scheduler/activities")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public ActivitiesInfo getActivities(@Context HttpServletRequest hsr,
+      @QueryParam("nodeId") String nodeId) {
+    YarnScheduler scheduler = rm.getRMContext().getScheduler();
+
+    if (scheduler instanceof AbstractYarnScheduler) {
+      String errMessage = "";
+
+      AbstractYarnScheduler abstractYarnScheduler =
+          (AbstractYarnScheduler) scheduler;
+
+      ActivitiesManager activitiesManager =
+          abstractYarnScheduler.getActivitiesManager();
+      if (null == activitiesManager) {
+        errMessage = "Not Capacity Scheduler";
+        return new ActivitiesInfo(errMessage, nodeId);
+      }
+
+      List<FiCaSchedulerNode> nodeList =
+          abstractYarnScheduler.getNodeTracker().getAllNodes();
+
+      boolean illegalInput = false;
+
+      if (nodeList.size() == 0) {
+        illegalInput = true;
+        errMessage = "No node manager running in the cluster";
+      } else {
+        if (nodeId != null) {
+          String hostName = nodeId;
+          String portName = "";
+          if (nodeId.contains(":")) {
+            int index = nodeId.indexOf(":");
+            hostName = nodeId.substring(0, index);
+            portName = nodeId.substring(index + 1);
+          }
+
+          boolean correctNodeId = false;
+          for (FiCaSchedulerNode node : nodeList) {
+            if ((portName.equals("") && node.getRMNode().getHostName().equals(
+                hostName)) || (!portName.equals("") && node.getRMNode()
+                .getHostName().equals(hostName) && String.valueOf(
+                node.getRMNode().getCommandPort()).equals(portName))) {
+              correctNodeId = true;
+              nodeId = node.getNodeID().toString();
+              break;
+            }
+          }
+          if (!correctNodeId) {
+            illegalInput = true;
+            errMessage = "Cannot find node manager with given node id";
+          }
+        }
+      }
+
+      if (!illegalInput) {
+        activitiesManager.recordNextNodeUpdateActivities(nodeId);
+        return activitiesManager.getActivitiesInfo(nodeId);
+      }
+
+      // Return a activities info with error message
+      return new ActivitiesInfo(errMessage, nodeId);
+    }
+
+    return null;
+  }
+
+  @GET
+  @Path("/scheduler/app-activities")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public AppActivitiesInfo getAppActivities(@Context HttpServletRequest hsr,
+      @QueryParam("appId") String appId, @QueryParam("maxTime") String time) {
+    YarnScheduler scheduler = rm.getRMContext().getScheduler();
+
+    if (scheduler instanceof AbstractYarnScheduler) {
+      AbstractYarnScheduler abstractYarnScheduler =
+          (AbstractYarnScheduler) scheduler;
+
+      ActivitiesManager activitiesManager =
+          abstractYarnScheduler.getActivitiesManager();
+      if (null == activitiesManager) {
+        String errMessage = "Not Capacity Scheduler";
+        return new AppActivitiesInfo(errMessage, appId);
+      }
+
+      if(appId == null) {
+        String errMessage = "Must provide an application Id";
+        return new AppActivitiesInfo(errMessage, null);
+      }
+
+      double maxTime = 3.0;
+
+      if (time != null) {
+        if (time.contains(".")) {
+          maxTime = Double.parseDouble(time);
+        } else {
+          maxTime = Double.parseDouble(time + ".0");
+        }
+      }
+
+      ApplicationId applicationId;
+      try {
+        applicationId = ApplicationId.fromString(appId);
+        activitiesManager.turnOnAppActivitiesRecording(applicationId, maxTime);
+        AppActivitiesInfo appActivitiesInfo =
+            activitiesManager.getAppActivitiesInfo(applicationId);
+
+        return appActivitiesInfo;
+      } catch (Exception e) {
+        String errMessage = "Cannot find application with given appId";
+        return new AppActivitiesInfo(errMessage, appId);
+      }
+
+    }
+    return null;
+  }
+
+  @GET
   @Path("/appstatistics")
   @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
   public ApplicationStatisticsInfo getAppStatistics(
@@ -749,7 +873,7 @@ public class RMWebServices extends WebServices {
     try {
       app = getRMAppForAppId(appId);
     } catch (NotFoundException e) {
-      RMAuditLogger.logFailure(userName, AuditConstants.KILL_APP_REQUEST,
+      RMAuditLogger.logFailure(userName, AuditConstants.GET_APP_STATE,
         "UNKNOWN", "RMWebService",
         "Trying to get state of an absent application " + appId);
       throw e;
@@ -802,7 +926,7 @@ public class RMWebServices extends WebServices {
       // allow users to kill the app
 
       if (targetState.getState().equals(YarnApplicationState.KILLED.toString())) {
-        return killApp(app, callerUGI, hsr);
+        return killApp(app, callerUGI, hsr, targetState.getDiagnostics());
       }
       throw new BadRequestException("Only '"
           + YarnApplicationState.KILLED.toString()
@@ -1018,7 +1142,8 @@ public class RMWebServices extends WebServices {
   }
 
   protected Response killApp(RMApp app, UserGroupInformation callerUGI,
-      HttpServletRequest hsr) throws IOException, InterruptedException {
+      HttpServletRequest hsr, final String diagnostic)
+      throws IOException, InterruptedException {
 
     if (app == null) {
       throw new IllegalArgumentException("app cannot be null");
@@ -1035,6 +1160,9 @@ public class RMWebServices extends WebServices {
                   YarnException {
                 KillApplicationRequest req =
                     KillApplicationRequest.newInstance(appid);
+                  if (diagnostic != null) {
+                    req.setDiagnostics(diagnostic);
+                  }
                 return rm.getClientRMService().forceKillApplication(req);
               }
             });
@@ -1085,9 +1213,9 @@ public class RMWebServices extends WebServices {
     try {
       app = getRMAppForAppId(appId);
     } catch (NotFoundException e) {
-      RMAuditLogger.logFailure(userName, AuditConstants.KILL_APP_REQUEST,
+      RMAuditLogger.logFailure(userName, AuditConstants.GET_APP_PRIORITY,
           "UNKNOWN", "RMWebService",
-          "Trying to get state of an absent application " + appId);
+          "Trying to get priority of an absent application " + appId);
       throw e;
     }
 
@@ -1128,9 +1256,9 @@ public class RMWebServices extends WebServices {
     try {
       app = getRMAppForAppId(appId);
     } catch (NotFoundException e) {
-      RMAuditLogger.logFailure(userName, AuditConstants.KILL_APP_REQUEST,
+      RMAuditLogger.logFailure(userName, AuditConstants.UPDATE_APP_PRIORITY,
           "UNKNOWN", "RMWebService",
-          "Trying to move an absent application " + appId);
+          "Trying to update priority an absent application " + appId);
       throw e;
     }
     Priority priority = app.getApplicationSubmissionContext().getPriority();
@@ -1199,9 +1327,9 @@ public class RMWebServices extends WebServices {
     try {
       app = getRMAppForAppId(appId);
     } catch (NotFoundException e) {
-      RMAuditLogger.logFailure(userName, AuditConstants.KILL_APP_REQUEST,
+      RMAuditLogger.logFailure(userName, AuditConstants.GET_APP_QUEUE,
         "UNKNOWN", "RMWebService",
-        "Trying to get state of an absent application " + appId);
+        "Trying to get queue of an absent application " + appId);
       throw e;
     }
 
@@ -1237,7 +1365,7 @@ public class RMWebServices extends WebServices {
     try {
       app = getRMAppForAppId(appId);
     } catch (NotFoundException e) {
-      RMAuditLogger.logFailure(userName, AuditConstants.KILL_APP_REQUEST,
+      RMAuditLogger.logFailure(userName, AuditConstants.MOVE_APP_REQUEST,
         "UNKNOWN", "RMWebService", "Trying to move an absent application "
             + appId);
       throw e;

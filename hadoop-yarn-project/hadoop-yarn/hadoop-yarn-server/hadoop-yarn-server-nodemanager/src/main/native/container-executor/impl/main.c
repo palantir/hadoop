@@ -43,26 +43,69 @@
 #endif
 
 static void display_usage(FILE *stream) {
-  char *usage_template =
-      "Usage: container-executor --checksetup\n" \
-      "       container-executor --mount-cgroups <hierarchy> <controller=path>...\n" \
-      "       container-executor --tc-modify-state <command-file>\n" \
-      "       container-executor --tc-read-state <command-file>\n" \
-      "       container-executor --tc-read-stats <command-file>\n" \
-      "       container-executor --run-docker <command-file>\n" \
-      "       container-executor <user> <yarn-user> <command> <command-args>\n"  \
+  fprintf(stream,
+    "Usage: container-executor --checksetup\n"
+    "       container-executor --mount-cgroups <hierarchy> "
+    "<controller=path>...\n" );
+
+  if(is_tc_support_enabled()) {
+    fprintf(stream,
+      "       container-executor --tc-modify-state <command-file>\n"
+      "       container-executor --tc-read-state <command-file>\n"
+      "       container-executor --tc-read-stats <command-file>\n" );
+  } else {
+    fprintf(stream,
+      "[DISABLED] container-executor --tc-modify-state <command-file>\n"
+      "[DISABLED] container-executor --tc-read-state <command-file>\n"
+      "[DISABLED] container-executor --tc-read-stats <command-file>\n");
+  }
+
+  if(is_docker_support_enabled()) {
+    fprintf(stream,
+      "       container-executor --run-docker <command-file>\n");
+  } else {
+    fprintf(stream,
+      "[DISABLED] container-executor --run-docker <command-file>\n");
+  }
+
+  fprintf(stream,
+      "       container-executor <user> <yarn-user> <command> <command-args>\n"
       "       where command and command-args: \n" \
-      "            initialize container:  %2d appid tokens nm-local-dirs nm-log-dirs cmd app...\n" \
-      "            launch container:      %2d appid containerid workdir container-script " \
-                              "tokens pidfile nm-local-dirs nm-log-dirs resources optional-tc-command-file\n" \
-      "            launch docker container:      %2d appid containerid workdir container-script " \
-                              "tokens pidfile nm-local-dirs nm-log-dirs docker-command-file resources optional-tc-command-file\n" \
-      "            signal container:      %2d container-pid signal\n" \
-      "            delete as user:        %2d relative-path\n" ;
+      "            initialize container:  %2d appid tokens nm-local-dirs "
+      "nm-log-dirs cmd app...\n"
+      "            launch container:      %2d appid containerid workdir "
+      "container-script tokens pidfile nm-local-dirs nm-log-dirs resources ",
+      INITIALIZE_CONTAINER, LAUNCH_CONTAINER);
 
+  if(is_tc_support_enabled()) {
+    fprintf(stream, "optional-tc-command-file\n");
+  } else {
+    fprintf(stream, "\n");
+  }
 
-  fprintf(stream, usage_template, INITIALIZE_CONTAINER, LAUNCH_CONTAINER, LAUNCH_DOCKER_CONTAINER,
-          SIGNAL_CONTAINER, DELETE_AS_USER);
+  if(is_docker_support_enabled()) {
+    fprintf(stream,
+      "            launch docker container:      %2d appid containerid workdir "
+      "container-script tokens pidfile nm-local-dirs nm-log-dirs "
+      "docker-command-file resources ", LAUNCH_DOCKER_CONTAINER);
+  } else {
+    fprintf(stream,
+      "[DISABLED]  launch docker container:      %2d appid containerid workdir "
+      "container-script tokens pidfile nm-local-dirs nm-log-dirs "
+      "docker-command-file resources ", LAUNCH_DOCKER_CONTAINER);
+  }
+
+  if(is_tc_support_enabled()) {
+    fprintf(stream, "optional-tc-command-file\n");
+  } else {
+    fprintf(stream, "\n");
+  }
+
+   fprintf(stream,
+      "            signal container:      %2d container-pid signal\n"
+      "            delete as user:        %2d relative-path\n"
+      "            list as user:          %2d relative-path\n",
+      SIGNAL_CONTAINER, DELETE_AS_USER, LIST_AS_USER);
 }
 
 /* Sets up log files for normal/error logging */
@@ -143,24 +186,28 @@ static void assert_valid_setup(char *current_executable) {
 }
 
 
+static void display_feature_disabled_message(const char* name) {
+    fprintf(ERRORFILE, "Feature disabled: %s\n", name);
+}
+
 /* Use to store parsed input parmeters for various operations */
 static struct {
   char *cgroups_hierarchy;
   char *traffic_control_command_file;
-  const char * run_as_user_name;
-  const char * yarn_user_name;
+  const char *run_as_user_name;
+  const char *yarn_user_name;
   char *local_dirs;
   char *log_dirs;
   char *resources_key;
   char *resources_value;
   char **resources_values;
-  const char * app_id;
-  const char * container_id;
-  const char * cred_file;
-  const char * script_file;
-  const char * current_dir;
-  const char * pid_file;
-  const char *dir_to_be_deleted;
+  const char *app_id;
+  const char *container_id;
+  const char *cred_file;
+  const char *script_file;
+  const char *current_dir;
+  const char *pid_file;
+  const char *target_dir;
   int container_pid;
   int signal;
   const char *docker_command_file;
@@ -199,47 +246,67 @@ static int validate_arguments(int argc, char **argv , int *operation) {
   }
 
   if (strcmp("--tc-modify-state", argv[1]) == 0) {
-    if (argc != 3) {
-      display_usage(stdout);
-      return INVALID_ARGUMENT_NUMBER;
+    if(is_tc_support_enabled()) {
+      if (argc != 3) {
+        display_usage(stdout);
+        return INVALID_ARGUMENT_NUMBER;
+      }
+      optind++;
+      cmd_input.traffic_control_command_file = argv[optind++];
+      *operation = TRAFFIC_CONTROL_MODIFY_STATE;
+      return 0;
+    } else {
+      display_feature_disabled_message("traffic control");
+      return FEATURE_DISABLED;
     }
-    optind++;
-    cmd_input.traffic_control_command_file = argv[optind++];
-    *operation = TRAFFIC_CONTROL_MODIFY_STATE;
-    return 0;
   }
 
   if (strcmp("--tc-read-state", argv[1]) == 0) {
-    if (argc != 3) {
-      display_usage(stdout);
-      return INVALID_ARGUMENT_NUMBER;
+    if(is_tc_support_enabled()) {
+      if (argc != 3) {
+        display_usage(stdout);
+        return INVALID_ARGUMENT_NUMBER;
+      }
+      optind++;
+      cmd_input.traffic_control_command_file = argv[optind++];
+      *operation = TRAFFIC_CONTROL_READ_STATE;
+      return 0;
+    } else {
+      display_feature_disabled_message("traffic control");
+      return FEATURE_DISABLED;
     }
-    optind++;
-    cmd_input.traffic_control_command_file = argv[optind++];
-    *operation = TRAFFIC_CONTROL_READ_STATE;
-    return 0;
   }
 
   if (strcmp("--tc-read-stats", argv[1]) == 0) {
-    if (argc != 3) {
-      display_usage(stdout);
-      return INVALID_ARGUMENT_NUMBER;
+    if(is_tc_support_enabled()) {
+      if (argc != 3) {
+        display_usage(stdout);
+        return INVALID_ARGUMENT_NUMBER;
+      }
+      optind++;
+      cmd_input.traffic_control_command_file = argv[optind++];
+      *operation = TRAFFIC_CONTROL_READ_STATS;
+      return 0;
+    } else {
+      display_feature_disabled_message("traffic control");
+      return FEATURE_DISABLED;
     }
-    optind++;
-    cmd_input.traffic_control_command_file = argv[optind++];
-    *operation = TRAFFIC_CONTROL_READ_STATS;
-    return 0;
   }
 
   if (strcmp("--run-docker", argv[1]) == 0) {
-    if (argc != 3) {
-      display_usage(stdout);
-      return INVALID_ARGUMENT_NUMBER;
+    if(is_docker_support_enabled()) {
+      if (argc != 3) {
+        display_usage(stdout);
+        return INVALID_ARGUMENT_NUMBER;
+      }
+      optind++;
+      cmd_input.docker_command_file = argv[optind++];
+      *operation = RUN_DOCKER;
+      return 0;
+    } else {
+        display_feature_disabled_message("docker");
+        return FEATURE_DISABLED;
     }
-    optind++;
-    cmd_input.docker_command_file = argv[optind++];
-    *operation = RUN_DOCKER;
-    return 0;
   }
   /* Now we have to validate 'run as user' operations that don't use
     a 'long option' - we should fix this at some point. The validation/argument
@@ -285,51 +352,64 @@ static int validate_run_as_user_commands(int argc, char **argv, int *operation) 
     *operation = RUN_AS_USER_INITIALIZE_CONTAINER;
     return 0;
  case LAUNCH_DOCKER_CONTAINER:
-    //kill me now.
-    if (!(argc == 14 || argc == 15)) {
-      fprintf(ERRORFILE, "Wrong number of arguments (%d vs 14 or 15) for launch docker container\n",
-       argc);
-      fflush(ERRORFILE);
-      return INVALID_ARGUMENT_NUMBER;
-    }
+   if(is_docker_support_enabled()) {
+      //kill me now.
+      if (!(argc == 14 || argc == 15)) {
+        fprintf(ERRORFILE, "Wrong number of arguments (%d vs 14 or 15) for"
+          " launch docker container\n", argc);
+        fflush(ERRORFILE);
+        return INVALID_ARGUMENT_NUMBER;
+      }
 
-    cmd_input.app_id = argv[optind++];
-    cmd_input.container_id = argv[optind++];
-    cmd_input.current_dir = argv[optind++];
-    cmd_input.script_file = argv[optind++];
-    cmd_input.cred_file = argv[optind++];
-    cmd_input.pid_file = argv[optind++];
-    cmd_input.local_dirs = argv[optind++];// good local dirs as a comma separated list
-    cmd_input.log_dirs = argv[optind++];// good log dirs as a comma separated list
-    cmd_input.docker_command_file = argv[optind++];
-    resources = argv[optind++];// key,value pair describing resources
-    resources_key = malloc(strlen(resources));
-    resources_value = malloc(strlen(resources));
-    if (get_kv_key(resources, resources_key, strlen(resources)) < 0 ||
-      get_kv_value(resources, resources_value, strlen(resources)) < 0) {
-      fprintf(ERRORFILE, "Invalid arguments for cgroups resources: %s",
-                         resources);
-      fflush(ERRORFILE);
-      free(resources_key);
-      free(resources_value);
-      return INVALID_ARGUMENT_NUMBER;
-    }
-    //network isolation through tc
-    if (argc == 15) {
-      cmd_input.traffic_control_command_file = argv[optind++];
-    }
+      cmd_input.app_id = argv[optind++];
+      cmd_input.container_id = argv[optind++];
+      cmd_input.current_dir = argv[optind++];
+      cmd_input.script_file = argv[optind++];
+      cmd_input.cred_file = argv[optind++];
+      cmd_input.pid_file = argv[optind++];
+      // good local dirs as a comma separated list
+      cmd_input.local_dirs = argv[optind++];
+      // good log dirs as a comma separated list
+      cmd_input.log_dirs = argv[optind++];
+      cmd_input.docker_command_file = argv[optind++];
+      // key,value pair describing resources
+      resources = argv[optind++];
+      resources_key = malloc(strlen(resources));
+      resources_value = malloc(strlen(resources));
+      if (get_kv_key(resources, resources_key, strlen(resources)) < 0 ||
+        get_kv_value(resources, resources_value, strlen(resources)) < 0) {
+        fprintf(ERRORFILE, "Invalid arguments for cgroups resources: %s",
+                           resources);
+        fflush(ERRORFILE);
+        free(resources_key);
+        free(resources_value);
+        return INVALID_ARGUMENT_NUMBER;
+      }
+      //network isolation through tc
+      if (argc == 15) {
+        if(is_tc_support_enabled()) {
+          cmd_input.traffic_control_command_file = argv[optind++];
+        } else {
+        display_feature_disabled_message("traffic control");
+        return FEATURE_DISABLED;
+        }
+      }
 
-    cmd_input.resources_key = resources_key;
-    cmd_input.resources_value = resources_value;
-    cmd_input.resources_values = extract_values(resources_value);
-    *operation = RUN_AS_USER_LAUNCH_DOCKER_CONTAINER;
-    return 0;
+      cmd_input.resources_key = resources_key;
+      cmd_input.resources_value = resources_value;
+      cmd_input.resources_values = extract_values(resources_value);
+      *operation = RUN_AS_USER_LAUNCH_DOCKER_CONTAINER;
+      return 0;
+   } else {
+      display_feature_disabled_message("docker");
+      return FEATURE_DISABLED;
+   }
 
   case LAUNCH_CONTAINER:
     //kill me now.
     if (!(argc == 13 || argc == 14)) {
-      fprintf(ERRORFILE, "Wrong number of arguments (%d vs 13 or 14) for launch container\n",
-       argc);
+      fprintf(ERRORFILE, "Wrong number of arguments (%d vs 13 or 14)"
+        " for launch container\n", argc);
       fflush(ERRORFILE);
       return INVALID_ARGUMENT_NUMBER;
     }
@@ -358,7 +438,12 @@ static int validate_run_as_user_commands(int argc, char **argv, int *operation) 
 
     //network isolation through tc
     if (argc == 14) {
-      cmd_input.traffic_control_command_file = argv[optind++];
+      if(is_tc_support_enabled()) {
+        cmd_input.traffic_control_command_file = argv[optind++];
+      } else {
+        display_feature_disabled_message("traffic control");
+        return FEATURE_DISABLED;
+      }
     }
 
     cmd_input.resources_key = resources_key;
@@ -395,8 +480,12 @@ static int validate_run_as_user_commands(int argc, char **argv, int *operation) 
     return 0;
 
   case DELETE_AS_USER:
-    cmd_input.dir_to_be_deleted = argv[optind++];
+    cmd_input.target_dir = argv[optind++];
     *operation = RUN_AS_USER_DELETE;
+    return 0;
+  case LIST_AS_USER:
+    cmd_input.target_dir = argv[optind++];
+    *operation = RUN_AS_USER_LIST;
     return 0;
   default:
     fprintf(ERRORFILE, "Invalid command %d not supported.",command);
@@ -532,8 +621,17 @@ int main(int argc, char **argv) {
     }
 
     exit_code = delete_as_user(cmd_input.yarn_user_name,
-                        cmd_input.dir_to_be_deleted,
+                        cmd_input.target_dir,
                         argv + optind);
+    break;
+  case RUN_AS_USER_LIST:
+    exit_code = set_user(cmd_input.run_as_user_name);
+
+    if (exit_code != 0) {
+      break;
+    }
+
+    exit_code = list_as_user(cmd_input.target_dir);
     break;
   }
 

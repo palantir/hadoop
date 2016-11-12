@@ -94,6 +94,7 @@ message ContainerProto {
   optional hadoop.common.TokenProto container_token = 6;
   optional ExecutionTypeProto execution_type = 7 [default = GUARANTEED];
   optional int64 allocation_request_id = 8 [default = -1];
+  optional int32 version = 9 [default = 0];
 }
 
 message ContainerReportProto {
@@ -183,6 +184,8 @@ message ApplicationResourceUsageReportProto {
   optional int64 vcore_seconds = 7;
   optional float queue_usage_percentage = 8;
   optional float cluster_usage_percentage = 9;
+  optional int64 preempted_memory_seconds = 10;
+  optional int64 preempted_vcore_seconds = 11;
 }
 
 message ApplicationReportProto {
@@ -369,6 +372,21 @@ message ApplicationSubmissionContextProto {
   optional ReservationIdProto reservation_id = 15;
   optional string node_label_expression = 16;
   optional ResourceRequestProto am_container_resource_request = 17;
+  repeated ApplicationTimeoutMapProto application_timeouts = 18;
+}
+
+enum ApplicationTimeoutTypeProto {
+  APP_TIMEOUT_LIFETIME = 1;
+}
+
+message ApplicationTimeoutMapProto {
+  optional ApplicationTimeoutTypeProto application_timeout_type = 1;
+  optional int64 timeout = 2;
+}
+
+message ApplicationUpdateTimeoutMapProto {
+  optional ApplicationTimeoutTypeProto application_timeout_type = 1;
+  optional string expire_time = 2;
 }
 
 message LogAggregationContextProto {
@@ -482,6 +500,8 @@ message ReservationDefinitionProto {
   optional int64 arrival = 2;
   optional int64 deadline = 3;
   optional string reservation_name = 4;
+  optional string recurrence_expression = 5 [default = "0"];
+  optional PriorityProto priority = 6;
 }
 
 message ResourceAllocationRequestProto {
@@ -529,6 +549,7 @@ message ContainerStatusProto {
   optional int32 exit_status = 4 [default = -1000];
   optional ResourceProto capability = 5;
   optional ExecutionTypeProto executionType = 6 [default = GUARANTEED];
+  repeated StringStringMapProto container_attributes = 7;
 }
 
 enum ContainerExitStatusProto {
@@ -537,11 +558,6 @@ enum ContainerExitStatusProto {
   ABORTED = -100;
   DISKS_FAILED = -101;
 }
-
-message ContainerResourceChangeRequestProto {
-  optional ContainerIdProto container_id = 1;
-  optional ResourceProto capability = 2;
-} 
 
 message ContainerRetryContextProto {
   optional ContainerRetryPolicyProto retry_policy = 1 [default = NEVER_RETRY];

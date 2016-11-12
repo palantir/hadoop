@@ -22,6 +22,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.FileNotFoundException;
+import java.util.ArrayList;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -30,12 +31,15 @@ import org.apache.hadoop.hdfs.DFSTestUtil;
 import org.apache.hadoop.hdfs.DFSUtil;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
 import org.apache.hadoop.hdfs.MiniDFSCluster;
+import org.apache.hadoop.hdfs.protocol.SnapshotException;
 import org.apache.hadoop.hdfs.server.namenode.snapshot.Snapshot;
+import org.apache.hadoop.hdfs.server.namenode.snapshot.SnapshotManager;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 /** Test snapshot related operations. */
 public class TestSnapshotPathINodes {
@@ -146,6 +150,11 @@ public class TestSnapshotPathINodes {
     // The returned nodesInPath should be non-snapshot
     assertSnapshot(nodesInPath, false, null, -1);
 
+    // verify components are correct
+    for (int i=0; i < components.length; i++) {
+      assertEquals(components[i], nodesInPath.getPathComponent(i));
+    }
+
     // The last INode should be associated with file1
     assertTrue("file1=" + file1 + ", nodesInPath=" + nodesInPath,
         nodesInPath.getINode(components.length - 1) != null);
@@ -160,6 +169,9 @@ public class TestSnapshotPathINodes {
     assertEquals(dir.toString(), nodesInPath.getPath(1));
     assertEquals(sub1.toString(), nodesInPath.getPath(2));
     assertEquals(file1.toString(), nodesInPath.getPath(3));
+
+    assertEquals(file1.getParent().toString(),
+                 nodesInPath.getParentINodesInPath().getPath());
 
     nodesInPath = INodesInPath.resolve(fsdir.rootDir, components, false);
     assertEquals(nodesInPath.length(), components.length);
@@ -188,6 +200,11 @@ public class TestSnapshotPathINodes {
     // SnapshotRootIndex should be 3: {root, Testsnapshot, sub1, s1, file1}
     final Snapshot snapshot = getSnapshot(nodesInPath, "s1", 3);
     assertSnapshot(nodesInPath, true, snapshot, 3);
+    assertEquals(".snapshot/s1",
+        DFSUtil.bytes2String(nodesInPath.getPathComponent(3)));
+    assertTrue(nodesInPath.getINode(3) instanceof Snapshot.Root);
+    assertEquals("s1", nodesInPath.getINode(3).getLocalName());
+
     // Check the INode for file1 (snapshot file)
     INode snapshotFileNode = nodesInPath.getLastINode();
     assertINodeFile(snapshotFileNode, file1);
@@ -207,6 +224,12 @@ public class TestSnapshotPathINodes {
     // The number of INodes returned should still be components.length
     // since we put a null in the inode array for ".snapshot"
     assertEquals(nodesInPath.length(), components.length);
+    assertEquals(".snapshot",
+        DFSUtil.bytes2String(nodesInPath.getLastLocalName()));
+    assertNull(nodesInPath.getLastINode());
+    // ensure parent inodes can strip the .snapshot
+    assertEquals(sub1.toString(),
+        nodesInPath.getParentINodesInPath().getPath());
 
     // No SnapshotRoot dir is included in the resolved inodes  
     assertSnapshot(nodesInPath, true, snapshot, -1);
@@ -414,5 +437,17 @@ public class TestSnapshotPathINodes {
     Assert.assertFalse(modTime == newNodesInPath.getINode(last).getModificationTime());
     hdfs.deleteSnapshot(sub1, "s3");
     hdfs.disallowSnapshot(sub1);
+  }
+
+  @Test
+  public void testShortCircuitSnapshotSearch() throws SnapshotException {
+    FSNamesystem fsn = cluster.getNamesystem();
+    SnapshotManager sm = fsn.getSnapshotManager();
+    assertEquals(0, sm.getNumSnapshottableDirs());
+
+    INodesInPath iip = Mockito.mock(INodesInPath.class);
+    List<INodeDirectory> snapDirs = new ArrayList<>();
+    FSDirSnapshotOp.checkSnapshot(fsn.getFSDirectory(), iip, snapDirs);
+    Mockito.verifyZeroInteractions(iip);
   }
 }

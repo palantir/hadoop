@@ -142,7 +142,7 @@ The output columns with -count -q are: QUOTA, REMAINING\_QUOTA, SPACE\_QUOTA, RE
 
 The output columns with -count -u are: QUOTA, REMAINING\_QUOTA, SPACE\_QUOTA, REMAINING\_SPACE\_QUOTA
 
-The -t option shows the quota and usage for each storage type.
+The -t option shows the quota and usage for each storage type. The -t option is ignored if -u or -q option is not given. The list of possible parameters that can be used in -t option(case insensitive except the parameter ""): "", "all", "ram_disk", "ssd", "disk" or "archive".
 
 The -h option shows sizes in human readable format.
 
@@ -504,7 +504,7 @@ See [HDFS Snapshots Guide](../hadoop-hdfs/HdfsSnapshots.html).
 rm
 ----
 
-Usage: `hadoop fs -rm [-f] [-r |-R] [-skipTrash] URI [URI ...]`
+Usage: `hadoop fs -rm [-f] [-r |-R] [-skipTrash] [-safely] URI [URI ...]`
 
 Delete files specified as args.
 
@@ -523,6 +523,7 @@ Options:
 * The -R option deletes the directory and any content under it recursively.
 * The -r option is equivalent to -R.
 * The -skipTrash option will bypass trash, if enabled, and delete the specified file(s) immediately. This can be useful when it is necessary to delete files from an over-quota directory.
+* The -safely option will require safety confirmation before deleting directory with total number of files greater than `hadoop.shell.delete.limit.num.files` (in core-site.xml, default: 100). It can be used with -skipTrash to prevent accidental deletion of large directories. Delay is expected when walking over large directory recursively to count the number of files to be deleted before the confirmation.
 
 Example:
 
@@ -638,11 +639,11 @@ stat
 
 Usage: `hadoop fs -stat [format] <path> ...`
 
-Print statistics about the file/directory at \<path\> in the specified format. Format accepts filesize in blocks (%b), type (%F), group name of owner (%g), name (%n), block size (%o), replication (%r), user name of owner(%u), and modification date (%y, %Y). %y shows UTC date as "yyyy-MM-dd HH:mm:ss" and %Y shows milliseconds since January 1, 1970 UTC. If the format is not specified, %y is used by default.
+Print statistics about the file/directory at \<path\> in the specified format. Format accepts permissions in octal (%a) and symbolic (%A), filesize in blocks (%b), type (%F), group name of owner (%g), name (%n), block size (%o), replication (%r), user name of owner(%u), and modification date (%y, %Y). %y shows UTC date as "yyyy-MM-dd HH:mm:ss" and %Y shows milliseconds since January 1, 1970 UTC. If the format is not specified, %y is used by default.
 
 Example:
 
-* `hadoop fs -stat "%F %u:%g %b %y %n" /file`
+* `hadoop fs -stat "%F %a %u:%g %b %y %n" /file`
 
 Exit Code: Returns 0 on success and -1 on error.
 

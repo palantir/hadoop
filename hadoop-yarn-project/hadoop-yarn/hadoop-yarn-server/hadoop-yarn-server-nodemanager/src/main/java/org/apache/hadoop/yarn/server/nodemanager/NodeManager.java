@@ -196,9 +196,10 @@ public class NodeManager extends CompositeService
   protected NMContext createNMContext(
       NMContainerTokenSecretManager containerTokenSecretManager,
       NMTokenSecretManagerInNM nmTokenSecretManager,
-      NMStateStoreService stateStore, boolean isDistSchedulerEnabled) {
+      NMStateStoreService stateStore, boolean isDistSchedulerEnabled,
+      Configuration conf) {
     return new NMContext(containerTokenSecretManager, nmTokenSecretManager,
-        dirsHandler, aclsManager, stateStore, isDistSchedulerEnabled);
+        dirsHandler, aclsManager, stateStore, isDistSchedulerEnabled, conf);
   }
 
   protected void doSecureLogin() throws IOException {
@@ -332,7 +333,10 @@ public class NodeManager extends CompositeService
             YarnConfiguration.DIST_SCHEDULING_ENABLED_DEFAULT);
 
     this.context = createNMContext(containerTokenSecretManager,
-        nmTokenSecretManager, nmStore, isDistSchedulingEnabled);
+        nmTokenSecretManager, nmStore, isDistSchedulingEnabled, conf);
+
+
+    ((NMContext)context).setContainerExecutor(exec);
 
     nodeLabelsProvider = createNodeLabelsProvider(conf);
 
@@ -458,6 +462,9 @@ public class NodeManager extends CompositeService
   public static class NMContext implements Context {
 
     private NodeId nodeId = null;
+
+    private Configuration conf = null;
+
     protected final ConcurrentMap<ApplicationId, Application> applications =
         new ConcurrentHashMap<ApplicationId, Application>();
 
@@ -490,11 +497,13 @@ public class NodeManager extends CompositeService
     private OpportunisticContainerAllocator containerAllocator;
 
     private final QueuingContext queuingContext;
+    private ContainerExecutor executor;
 
     public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
         NMTokenSecretManagerInNM nmTokenSecretManager,
         LocalDirsHandlerService dirsHandler, ApplicationACLsManager aclsManager,
-        NMStateStoreService stateStore, boolean isDistSchedulingEnabled) {
+        NMStateStoreService stateStore, boolean isDistSchedulingEnabled,
+        Configuration conf) {
       this.containerTokenSecretManager = containerTokenSecretManager;
       this.nmTokenSecretManager = nmTokenSecretManager;
       this.dirsHandler = dirsHandler;
@@ -507,6 +516,7 @@ public class NodeManager extends CompositeService
           LogAggregationReport>();
       this.queuingContext = new QueuingNMContext();
       this.isDistSchedulingEnabled = isDistSchedulingEnabled;
+      this.conf = conf;
     }
 
     /**
@@ -525,6 +535,11 @@ public class NodeManager extends CompositeService
     @Override
     public ConcurrentMap<ApplicationId, Application> getApplications() {
       return this.applications;
+    }
+
+    @Override
+    public Configuration getConf() {
+      return this.conf;
     }
 
     @Override
@@ -646,6 +661,15 @@ public class NodeManager extends CompositeService
     public OpportunisticContainerAllocator getContainerAllocator() {
       return containerAllocator;
     }
+
+    @Override
+    public ContainerExecutor getContainerExecutor() {
+      return this.executor;
+    }
+
+    public void setContainerExecutor(ContainerExecutor executor) {
+      this.executor = executor;
+    }
   }
 
   /**
@@ -683,7 +707,7 @@ public class NodeManager extends CompositeService
       // Failed to start if we're a Unix based system but we don't have bash.
       // Bash is necessary to launch containers under Unix-based systems.
       if (!Shell.WINDOWS) {
-        if (!Shell.isBashSupported) {
+        if (!Shell.checkIsBashSupported()) {
           String message =
               "Failing NodeManager start since we're on a "
                   + "Unix-based system but bash doesn't seem to be available.";

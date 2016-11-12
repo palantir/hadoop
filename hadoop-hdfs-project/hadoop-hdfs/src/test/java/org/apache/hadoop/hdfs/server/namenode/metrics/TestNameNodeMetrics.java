@@ -18,6 +18,7 @@
 package org.apache.hadoop.hdfs.server.namenode.metrics;
 
 import org.apache.hadoop.crypto.key.JavaKeyStoreProvider;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystemTestHelper;
 import org.apache.hadoop.fs.FileSystemTestWrapper;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -172,7 +173,9 @@ public class TestNameNodeMetrics {
         MetricsAsserts.getLongGauge("CapacityRemaining", rb);
     long capacityUsedNonDFS =
         MetricsAsserts.getLongGauge("CapacityUsedNonDFS", rb);
-    assert(capacityUsed + capacityRemaining + capacityUsedNonDFS ==
+    // There will be 5% space reserved in ext filesystem which is not
+    // considered.
+    assert (capacityUsed + capacityRemaining + capacityUsedNonDFS <=
         capacityTotal);
   }
 
@@ -641,7 +644,7 @@ public class TestNameNodeMetrics {
     // Set up java key store
     String testRoot = fsHelper.getTestRootDir();
     File testRootDir = new File(testRoot).getAbsoluteFile();
-    conf.set(DFSConfigKeys.DFS_ENCRYPTION_KEY_PROVIDER_URI,
+    conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH,
         JavaKeyStoreProvider.SCHEME_NAME + "://file" +
         new Path(testRootDir.toString(), "test.jks").toUri());
     conf.setBoolean(DFSConfigKeys

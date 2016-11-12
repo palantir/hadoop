@@ -22,6 +22,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -94,6 +95,8 @@ public interface Context {
 
   boolean getDecommissioned();
 
+  Configuration getConf();
+
   void setDecommissioned(boolean isDecommissioned);
 
   ConcurrentLinkedQueue<LogAggregationReport>
@@ -111,4 +114,6 @@ public interface Context {
   boolean isDistributedSchedulingEnabled();
 
   OpportunisticContainerAllocator getContainerAllocator();
+
+  ContainerExecutor getContainerExecutor();
 }

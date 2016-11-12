@@ -51,6 +51,9 @@ public class RMAuditLogger {
     public static final String KILL_APP_REQUEST = "Kill Application Request";
     public static final String SUBMIT_APP_REQUEST = "Submit Application Request";
     public static final String MOVE_APP_REQUEST = "Move Application Request";
+    public static final String GET_APP_STATE = "Get Application State";
+    public static final String GET_APP_PRIORITY = "Get Application Priority";
+    public static final String GET_APP_QUEUE = "Get Application Queue";
     public static final String FINISH_SUCCESS_APP = "Application Finished - Succeeded";
     public static final String FINISH_FAILED_APP = "Application Finished - Failed";
     public static final String FINISH_KILLED_APP = "Application Finished - Killed";
@@ -60,7 +63,9 @@ public class RMAuditLogger {
     public static final String ALLOC_CONTAINER = "AM Allocated Container";
     public static final String RELEASE_CONTAINER = "AM Released Container";
     public static final String UPDATE_APP_PRIORITY =
-        "Update Application Priority Request";
+        "Update Application Priority";
+    public static final String UPDATE_APP_TIMEOUTS =
+        "Update Application Timeouts";
     public static final String CHANGE_CONTAINER_RESOURCE =
         "AM Changed Container Resource";
     public static final String SIGNAL_CONTAINER = "Signal Container Request";

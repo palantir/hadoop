@@ -56,6 +56,7 @@ import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.hdfs.server.protocol.DatanodeStorage;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.CloseableReferenceCount;
 import org.apache.hadoop.util.DiskChecker.DiskErrorException;
 import org.apache.hadoop.util.StringUtils;
@@ -304,7 +305,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
 
   private void decDfsUsedAndNumBlocks(String bpid, long value,
                                       boolean blockFileDeleted) {
-    synchronized(dataset) {
+    try(AutoCloseableLock lock = dataset.acquireDatasetLock()) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
         bp.decDfsUsed(value);
@@ -316,7 +317,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   }
 
   void incDfsUsedAndNumBlocks(String bpid, long value) {
-    synchronized (dataset) {
+    try(AutoCloseableLock lock = dataset.acquireDatasetLock()) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
         bp.incDfsUsed(value);
@@ -326,7 +327,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   }
 
   void incDfsUsed(String bpid, long value) {
-    synchronized(dataset) {
+    try(AutoCloseableLock lock = dataset.acquireDatasetLock()) {
       BlockPoolSlice bp = bpSlices.get(bpid);
       if (bp != null) {
         bp.incDfsUsed(value);
@@ -337,7 +338,7 @@ public class FsVolumeImpl implements FsVolumeSpi {
   @VisibleForTesting
   public long getDfsUsed() throws IOException {
     long dfsUsed = 0;
-    synchronized(dataset) {
+    try(AutoCloseableLock lock = dataset.acquireDatasetLock()) {
       for(BlockPoolSlice s : bpSlices.values()) {
         dfsUsed += s.getDfsUsed();
       }
@@ -384,13 +385,44 @@ public class FsVolumeImpl implements FsVolumeSpi {
    */
   @Override
   public long getAvailable() throws IOException {
-    long remaining = getCapacity() - getDfsUsed() - reservedForReplicas.get();
-    long available = usage.getAvailable() - reserved
-        - reservedForReplicas.get();
+    long remaining = getCapacity() - getDfsUsed() - getReservedForReplicas();
+    long available = usage.getAvailable()  - getRemainingReserved()
+        - getReservedForReplicas();
     if (remaining > available) {
       remaining = available;
     }
     return (remaining > 0) ? remaining : 0;
+  }
+
+  long getActualNonDfsUsed() throws IOException {
+    return usage.getUsed() - getDfsUsed();
+  }
+
+  private long getRemainingReserved() throws IOException {
+    long actualNonDfsUsed = getActualNonDfsUsed();
+    if (actualNonDfsUsed < reserved) {
+      return reserved - actualNonDfsUsed;
+    }
+    return 0L;
+  }
+
+  /**
+   * Unplanned Non-DFS usage, i.e. Extra usage beyond reserved.
+   *
+   * @return
+   * @throws IOException
+   */
+  public long getNonDfsUsed() throws IOException {
+    long actualNonDfsUsed = getActualNonDfsUsed();
+    if (actualNonDfsUsed < reserved) {
+      return 0L;
+    }
+    return actualNonDfsUsed - reserved;
+  }
+
+  @VisibleForTesting
+  long getDfAvailable() {
+    return usage.getAvailable();
   }
 
   @VisibleForTesting

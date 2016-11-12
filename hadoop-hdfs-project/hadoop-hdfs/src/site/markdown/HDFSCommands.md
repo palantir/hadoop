@@ -46,7 +46,8 @@ HDFS Commands Guide
     * [storagepolicies](#storagepolicies)
     * [zkfc](#zkfc)
 * [Debug Commands](#Debug_Commands)
-    * [verify](#verify)
+    * [verifyMeta](#verifyMeta)
+    * [computeMeta](#computeMeta)
     * [recoverLease](#recoverLease)
 
 Overview
@@ -229,6 +230,7 @@ Usage: `hdfs oiv [OPTIONS] -i INPUT_FILE`
 | `-addr` *address* | Specify the address(host:port) to listen. (localhost:5978 by default). This option is used with Web processor. |
 | `-maxSize` *size* | Specify the range [0, maxSize] of file sizes to be analyzed in bytes (128GB by default). This option is used with FileDistribution processor. |
 | `-step` *size* | Specify the granularity of the distribution in bytes (2MB by default). This option is used with FileDistribution processor. |
+| `-format` | Format the output result in a human-readable fashion rather than a number of bytes. (false by default). This option is used with FileDistribution processor. |
 | `-delimiter` *arg* | Delimiting string to use with Delimited processor. |
 | `-t`,`--temp` *temporary dir* | Use temporary dir to cache intermediate result to generate Delimited outputs. If not set, Delimited processor constructs the namespace in memory before outputting text. |
 | `-h`,`--help` | Display the tool usage and help information and exit. |
@@ -250,6 +252,9 @@ Usage: `hdfs oiv_legacy [OPTIONS] -i INPUT_FILE -o OUTPUT_FILE`
 | COMMAND\_OPTION | Description |
 |:---- |:---- |
 | `-p`\|`--processor` *processor* | Specify the image processor to apply against the image file. Valid options are Ls (default), XML, Delimited, Indented, and FileDistribution. |
+| `-maxSize` *size* | Specify the range [0, maxSize] of file sizes to be analyzed in bytes (128GB by default). This option is used with FileDistribution processor. |
+| `-step` *size* | Specify the granularity of the distribution in bytes (2MB by default). This option is used with FileDistribution processor. |
+| `-format` | Format the output result in a human-readable fashion rather than a number of bytes. (false by default). This option is used with FileDistribution processor. |
 | `-skipBlocks` | Do not enumerate individual blocks within files. This may save processing time and outfile file space on namespaces with very large files. The Ls processor reads the blocks to correctly determine file sizes and ignores this option. |
 | `-printToScreen` | Pipe output of processor to console as well as specified file. On extremely large namespaces, this may increase processing time by an order of magnitude. |
 | `-delimiter` *arg* | When used in conjunction with the Delimited processor, replaces the default tab delimiter with the string specified by *arg*. |
@@ -552,11 +557,11 @@ This comamnd starts a Zookeeper Failover Controller process for use with [HDFS H
 Debug Commands
 --------------
 
-Useful commands to help administrators debug HDFS issues, like validating block files and calling recoverLease.
+Useful commands to help administrators debug HDFS issues. These commands are for advanced users only.
 
-### `verify`
+### `verifyMeta`
 
-Usage: `hdfs debug verify -meta <metadata-file> [-block <block-file>]`
+Usage: `hdfs debug verifyMeta -meta <metadata-file> [-block <block-file>]`
 
 | COMMAND\_OPTION | Description |
 |:---- |:---- |
@@ -564,6 +569,19 @@ Usage: `hdfs debug verify -meta <metadata-file> [-block <block-file>]`
 | `-meta` *metadata-file* | Absolute path for the metadata file on the local file system of the data node. |
 
 Verify HDFS metadata and block files. If a block file is specified, we will verify that the checksums in the metadata file match the block file.
+
+### `computeMeta`
+
+Usage: `hdfs debug computeMeta -block <block-file> -out <output-metadata-file>`
+
+| COMMAND\_OPTION | Description |
+|:---- |:---- |
+| `-block` *block-file* | Absolute path for the block file on the local file system of the data node. |
+| `-out` *output-metadata-file* | Absolute path for the output metadata file to store the checksum computation result from the block file. |
+
+Compute HDFS metadata from block files. If a block file is specified, we will compute the checksums from the block file, and save it to the specified output metadata file.
+
+**NOTE**: Use at your own risk! If the block file is corrupt and you overwrite it's meta file, it will show up as 'good' in HDFS, but you can't read the data. Only use as a last measure, and when you are 100% certain the block file is good.
 
 ### `recoverLease`
 

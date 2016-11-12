@@ -20,6 +20,8 @@ package org.apache.hadoop.fs.s3a.scale;
 
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.contract.ContractTestUtils;
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
+
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,12 +52,12 @@ public class ITestS3ADeleteManyFiles extends S3AScaleTestBase {
    */
   @Test
   public void testBulkRenameAndDelete() throws Throwable {
-    final Path scaleTestDir = getTestPath();
+    final Path scaleTestDir = path("testBulkRenameAndDelete");
     final Path srcDir = new Path(scaleTestDir, "src");
     final Path finalDir = new Path(scaleTestDir, "final");
     final long count = getOperationCount();
+    final S3AFileSystem fs = getFileSystem();
     ContractTestUtils.rm(fs, scaleTestDir, true, false);
-
     fs.mkdirs(srcDir);
     fs.mkdirs(finalDir);
 
@@ -114,22 +116,4 @@ public class ITestS3ADeleteManyFiles extends S3AScaleTestBase {
     ContractTestUtils.assertDeleted(fs, finalDir, true, false);
   }
 
-  @Test
-  public void testOpenCreate() throws IOException {
-    Path dir = new Path("/tests3a");
-    ContractTestUtils.createAndVerifyFile(fs, dir, 1024);
-    ContractTestUtils.createAndVerifyFile(fs, dir, 5 * 1024 * 1024);
-    ContractTestUtils.createAndVerifyFile(fs, dir, 20 * 1024 * 1024);
-
-
-    /*
-    Enable to test the multipart upload
-    try {
-      ContractTestUtils.createAndVerifyFile(fs, dir,
-          (long)6 * 1024 * 1024 * 1024);
-    } catch (IOException e) {
-      fail(e.getMessage());
-    }
-    */
-  }
 }

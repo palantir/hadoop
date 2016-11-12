@@ -44,6 +44,9 @@ static const int DEFAULT_MIN_USERID = 1000;
 
 static const char* DEFAULT_BANNED_USERS[] = {"mapred", "hdfs", "bin", 0};
 
+static const int DEFAULT_DOCKER_SUPPORT_ENABLED = 0;
+static const int DEFAULT_TC_SUPPORT_ENABLED = 0;
+
 //location of traffic control binary
 static const char* TC_BIN = "/sbin/tc";
 static const char* TC_MODIFY_STATE_OPTS [] = { "-b" , NULL};
@@ -412,6 +415,49 @@ int change_user(uid_t user, gid_t group) {
   return 0;
 }
 
+int is_feature_enabled(const char* feature_key, int default_value,
+                              struct configuration *cfg) {
+    char *enabled_str = get_value(feature_key, cfg);
+    int enabled = default_value;
+
+    if (enabled_str != NULL) {
+        char *end_ptr = NULL;
+        enabled = strtol(enabled_str, &end_ptr, 10);
+
+        if ((enabled_str == end_ptr || *end_ptr != '\0') ||
+            (enabled < 0 || enabled > 1)) {
+              fprintf(LOGFILE, "Illegal value '%s' for '%s' in configuration. "
+              "Using default value: %d.\n", enabled_str, feature_key,
+              default_value);
+              fflush(LOGFILE);
+              free(enabled_str);
+              return default_value;
+        }
+
+        free(enabled_str);
+        return enabled;
+    } else {
+        return default_value;
+    }
+}
+
+int is_docker_support_enabled() {
+    return is_feature_enabled(DOCKER_SUPPORT_ENABLED_KEY,
+    DEFAULT_DOCKER_SUPPORT_ENABLED, &executor_cfg);
+}
+
+int is_tc_support_enabled() {
+    return is_feature_enabled(TC_SUPPORT_ENABLED_KEY,
+    DEFAULT_TC_SUPPORT_ENABLED, &executor_cfg);
+}
+
+char* check_docker_binary(char *docker_binary) {
+  if (docker_binary == NULL) {
+    return "docker";
+  }
+  return docker_binary;
+}
+
 /**
  * Utility function to concatenate argB to argA using the concat_pattern.
  */
@@ -425,7 +471,7 @@ char *concatenate(char *concat_pattern, char *return_path_name,
   for (j = 0; j < numArgs; j++) {
     arg = va_arg(ap, char*);
     if (arg == NULL) {
-      fprintf(LOGFILE, "One of the arguments passed for %s in null.\n",
+      fprintf(LOGFILE, "One of the arguments passed for %s is null.\n",
           return_path_name);
       return NULL;
     }
@@ -1100,12 +1146,11 @@ char* parse_docker_command_file(const char* command_file) {
 int run_docker(const char *command_file) {
   char* docker_command = parse_docker_command_file(command_file);
   char* docker_binary = get_value(DOCKER_BINARY_KEY, &executor_cfg);
+  docker_binary = check_docker_binary(docker_binary);
+
   char* docker_command_with_binary = calloc(sizeof(char), EXECUTOR_PATH_MAX);
   snprintf(docker_command_with_binary, EXECUTOR_PATH_MAX, "%s %s", docker_binary, docker_command);
   char **args = extract_values_delim(docker_command_with_binary, " ");
-
-  //clean up command file before we exec
-  unlink(command_file);
 
   int exit_code = -1;
   if (execvp(docker_binary, args) != 0) {
@@ -1265,9 +1310,7 @@ int launch_docker_container_as_user(const char * user, const char *app_id,
 
   char *docker_command = parse_docker_command_file(command_file);
   char *docker_binary = get_value(DOCKER_BINARY_KEY, &executor_cfg);
-  if (docker_binary == NULL) {
-    docker_binary = "docker";
-  }
+  docker_binary = check_docker_binary(docker_binary);
 
   fprintf(LOGFILE, "Creating script paths...\n");
   exit_code = create_script_paths(
@@ -1419,8 +1462,6 @@ int launch_docker_container_as_user(const char * user, const char *app_id,
   }
 
 cleanup:
-  //clean up docker command file
-  unlink(command_file);
 
   if (exit_code_file != NULL && write_exit_code_file_as_nm(exit_code_file, exit_code) < 0) {
     fprintf (ERRORFILE,
@@ -1898,6 +1939,58 @@ int delete_as_user(const char *user,
   return ret;
 }
 
+/**
+ * List the files in the given directory as the user.
+ * user: the user listing the files
+ * target_dir: the directory from which to list files
+ */
+int list_as_user(const char *target_dir) {
+  int ret = 0;
+  struct stat sb;
+
+  if (stat(target_dir, &sb) != 0) {
+    // If directory doesn't exist or can't be accessed, error out
+    fprintf(LOGFILE, "Could not stat %s - %s\n", target_dir,
+        strerror(errno));
+    ret = -1;
+  } else if (!S_ISDIR(sb.st_mode)) {
+    // If it's not a directory, list it as the only file
+    printf("%s\n", target_dir);
+  } else {
+    DIR *dir = opendir(target_dir);
+
+    if (dir != NULL) {
+      struct dirent *file;
+
+      errno = 0;
+
+      do {
+        file = readdir(dir);
+
+        // Ignore the . and .. entries
+        if ((file != NULL) &&
+            (strcmp(".", file->d_name) != 0) &&
+            (strcmp("..", file->d_name) != 0)) {
+          printf("%s\n", file->d_name);
+        }
+      } while (file != NULL);
+
+      // If we ended the directory read early on an error, then error out
+      if (errno != 0) {
+        fprintf(LOGFILE, "Could not read directory %s - %s\n", target_dir,
+            strerror(errno));
+        ret = -1;
+      }
+    } else {
+      fprintf(LOGFILE, "Could not open directory %s - %s\n", target_dir,
+          strerror(errno));
+      ret = -1;
+    }
+  }
+
+  return ret;
+}
+
 void chown_dir_contents(const char *dir_path, uid_t uid, gid_t gid) {
   DIR *dp;
   struct dirent *ep;
@@ -1998,7 +2091,6 @@ static int run_traffic_control(const char *opts[], char *command_file) {
       fprintf(LOGFILE, "failed to execute tc command!\n");
       return TRAFFIC_CONTROL_EXECUTION_FAILED;
     }
-    unlink(command_file);
     return 0;
   } else {
     execv(TC_BIN, (char**)args);

@@ -1321,6 +1321,12 @@
   </property>
 
   <property>
+    <description>Enable container monitor</description>
+    <name>yarn.nodemanager.container-monitor.enabled</name>
+    <value>true</value>
+  </property>
+
+  <property>
     <description>How often to monitor containers. If not set, the value for
     yarn.nodemanager.resource-monitor.interval-ms will be used.</description>
     <name>yarn.nodemanager.container-monitor.interval-ms</name>
@@ -1790,11 +1796,6 @@
   </property>
 
   <!-- Map Reduce Configuration -->
-
-  <property>
-    <name>mapreduce.job.hdfs-servers</name>
-    <value>${fs.defaultFS}</value>
-  </property>
 
   <property>
     <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
@@ -2665,7 +2666,7 @@
     The address of the AMRMProxyService listener.
     </description>
     <name>yarn.nodemanager.amrmproxy.address</name>
-    <value>0.0.0.0:8048</value>
+    <value>0.0.0.0:8049</value>
   </property>
 
   <property>
@@ -2986,4 +2987,13 @@
     <name>yarn.resourcemanager.node-removal-untracked.timeout-ms</name>
     <value>60000</value>
   </property>
+
+  <property>
+    <description>
+    The RMAppLifetimeMonitor Service uses this value as monitor interval
+    </description>
+    <name>yarn.resourcemanager.application-timeouts.monitor.interval-ms</name>
+    <value>60000</value>
+  </property>
+
 </configuration>

@@ -44,12 +44,14 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.HdfsConstants;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsDatasetSpi;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeSpi;
 import org.apache.hadoop.io.IOUtils;
+import org.apache.hadoop.util.AutoCloseableLock;
 import org.apache.hadoop.util.Daemon;
 import org.apache.hadoop.util.StopWatch;
 import org.apache.hadoop.util.Time;
@@ -583,7 +585,7 @@ public class DirectoryScanner implements Runnable {
     Map<String, ScanInfo[]> diskReport = getDiskReport();
 
     // Hold FSDataset lock to prevent further changes to the block map
-    synchronized(dataset) {
+    try(AutoCloseableLock lock = dataset.acquireDatasetLock()) {
       for (Entry<String, ScanInfo[]> entry : diskReport.entrySet()) {
         String bpid = entry.getKey();
         ScanInfo[] blockpoolReport = entry.getValue();
@@ -594,14 +596,13 @@ public class DirectoryScanner implements Runnable {
         diffs.put(bpid, diffRecord);
         
         statsRecord.totalBlocks = blockpoolReport.length;
-        List<FinalizedReplica> bl = dataset.getFinalizedBlocks(bpid);
-        FinalizedReplica[] memReport = bl.toArray(new FinalizedReplica[bl.size()]);
-        Arrays.sort(memReport); // Sort based on blockId
-  
+        final List<FinalizedReplica> bl = dataset.getFinalizedBlocks(bpid);
+        Collections.sort(bl); // Sort based on blockId
+
         int d = 0; // index for blockpoolReport
         int m = 0; // index for memReprot
-        while (m < memReport.length && d < blockpoolReport.length) {
-          FinalizedReplica memBlock = memReport[m];
+        while (m < bl.size() && d < blockpoolReport.length) {
+          FinalizedReplica memBlock = bl.get(m);
           ScanInfo info = blockpoolReport[d];
           if (info.getBlockId() < memBlock.getBlockId()) {
             if (!dataset.isDeletingBlock(bpid, info.getBlockId())) {
@@ -648,8 +649,8 @@ public class DirectoryScanner implements Runnable {
             ++m;
           }
         }
-        while (m < memReport.length) {
-          FinalizedReplica current = memReport[m++];
+        while (m < bl.size()) {
+          FinalizedReplica current = bl.get(m++);
           addDifference(diffRecord, statsRecord,
                         current.getBlockId(), current.getVolume());
         }
