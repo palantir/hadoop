@@ -44,7 +44,7 @@ test:
 
 deployment:
   release:
-    tag: /[0-9]+(?:\.[0-9]+)+-palantir[0-9]+/
+    tag: /branch2-palantir[0-9]+/
     commands:
       - curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/hadoop/$(git describe --tags)/publish
   snapshot:
