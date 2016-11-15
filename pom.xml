@@ -36,6 +36,10 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
 
   <distributionManagement>
     <repository>
+      <id>bintray-palantir-release</id>
+      <url>https://api.bintray.com/maven/palantir/releases/hadoop/</url>
+    </repository>
+    <repository>
       <id>${distMgmtStagingId}</id>
       <name>${distMgmtStagingName}</name>
       <url>${distMgmtStagingUrl}</url>
@@ -52,6 +56,18 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
   </distributionManagement>
 
   <repositories>
+    <repository>
+      <id>palantir</id>
+      <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
+      <name>Palantir Maven Repository</name>
+      <url>http://dl.bintray.com/palantir/releases</url>
+      <releases>
+	<enabled>true</enabled>
+      </releases>
+      <snapshots>
+	<enabled>false</enabled>
+      </snapshots>
+    </repository>
     <repository>
       <id>${distMgmtSnapshotsId}</id>
       <name>${distMgmtSnapshotsName}</name>
