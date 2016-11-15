@@ -37,7 +37,9 @@ import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
-import org.apache.hadoop.yarn.util.ConverterUtils;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.apache.hadoop.yarn.util.Times;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 
@@ -96,6 +98,8 @@ public class AppInfo {
   protected long preemptedResourceVCores;
   protected int numNonAMContainerPreempted;
   protected int numAMContainerPreempted;
+  private long preemptedMemorySeconds;
+  private long preemptedVcoreSeconds;
 
   protected List<ResourceRequest> resourceRequests;
 
@@ -103,6 +107,8 @@ public class AppInfo {
   protected boolean unmanagedApplication;
   protected String appNodeLabelExpression;
   protected String amNodeLabelExpression;
+
+  protected ResourcesInfo resourceInfo = null;
 
   public AppInfo() {
   } // JAXB needs this
@@ -199,12 +205,27 @@ public class AppInfo {
           appMetrics.getResourcePreempted().getVirtualCores();
       memorySeconds = appMetrics.getMemorySeconds();
       vcoreSeconds = appMetrics.getVcoreSeconds();
+      preemptedMemorySeconds = appMetrics.getPreemptedMemorySeconds();
+      preemptedVcoreSeconds = appMetrics.getPreemptedVcoreSeconds();
       unmanagedApplication =
           appSubmissionContext.getUnmanagedAM();
       appNodeLabelExpression =
           app.getApplicationSubmissionContext().getNodeLabelExpression();
       amNodeLabelExpression = (unmanagedApplication) ? null
           : app.getAMResourceRequest().getNodeLabelExpression();
+
+      // Setting partition based resource usage of application
+      ResourceScheduler scheduler = rm.getRMContext().getScheduler();
+      if (scheduler instanceof CapacityScheduler) {
+        RMAppAttempt attempt = app.getCurrentAppAttempt();
+        if (null != attempt) {
+          FiCaSchedulerApp ficaAppAttempt = ((CapacityScheduler) scheduler)
+              .getApplicationAttempt(attempt.getAppAttemptId());
+          resourceInfo = null != ficaAppAttempt
+              ? new ResourcesInfo(ficaAppAttempt.getSchedulingResourceUsage())
+              : null;
+        }
+      }
     }
   }
 
@@ -352,6 +373,14 @@ public class AppInfo {
     return vcoreSeconds;
   }
 
+  public long getPreemptedMemorySeconds() {
+    return preemptedMemorySeconds;
+  }
+
+  public long getPreemptedVcoreSeconds() {
+    return preemptedVcoreSeconds;
+  }
+
   public List<ResourceRequest> getResourceRequests() {
     return this.resourceRequests;
   }
@@ -374,5 +403,9 @@ public class AppInfo {
 
   public String getAmNodeLabelExpression() {
     return this.amNodeLabelExpression;
+  }
+
+  public ResourcesInfo getResourceInfo() {
+    return resourceInfo;
   }
 }

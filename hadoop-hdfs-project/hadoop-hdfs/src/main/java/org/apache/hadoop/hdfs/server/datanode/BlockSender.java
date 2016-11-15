@@ -36,6 +36,7 @@ import org.apache.commons.logging.Log;
 import org.apache.hadoop.fs.ChecksumException;
 import org.apache.hadoop.hdfs.DFSUtilClient;
 import org.apache.hadoop.hdfs.HdfsConfiguration;
+import org.apache.hadoop.hdfs.protocol.Block;
 import org.apache.hadoop.hdfs.protocol.ExtendedBlock;
 import org.apache.hadoop.hdfs.protocol.datatransfer.PacketHeader;
 import org.apache.hadoop.hdfs.server.datanode.fsdataset.FsVolumeReference;
@@ -157,6 +158,9 @@ class BlockSender implements java.io.Closeable {
   /** The reference to the volume where the block is located */
   private FsVolumeReference volumeRef;
 
+  /** The replica of the block that is being read. */
+  private final Replica replica;
+
   // Cache-management related fields
   private final long readaheadLength;
 
@@ -239,7 +243,6 @@ class BlockSender implements java.io.Closeable {
             "If verifying checksum, currently must also send it.");
       }
       
-      final Replica replica;
       final long replicaVisibleLength;
       try(AutoCloseableLock lock = datanode.data.acquireDatasetLock()) {
         replica = getReplica(block, datanode);
@@ -320,6 +323,12 @@ class BlockSender implements java.io.Closeable {
           } else {
             LOG.warn("Could not find metadata file for " + block);
           }
+        } catch (FileNotFoundException e) {
+          // The replica is on its volume map but not on disk
+          datanode.notifyNamenodeDeletedBlock(block, replica.getStorageUuid());
+          datanode.data.invalidate(block.getBlockPoolId(),
+              new Block[]{block.getLocalBlock()});
+          throw e;
         } finally {
           if (!keepMetaInOpen) {
             IOUtils.closeStream(metaIn);
@@ -620,10 +629,10 @@ class BlockSender implements java.io.Closeable {
         String ioem = e.getMessage();
         if (!ioem.startsWith("Broken pipe") && !ioem.startsWith("Connection reset")) {
           LOG.error("BlockSender.sendChunks() exception: ", e);
-        }
-        datanode.getBlockScanner().markSuspectBlock(
+          datanode.getBlockScanner().markSuspectBlock(
               volumeRef.getVolume().getStorageID(),
               block);
+        }
       }
       throw ioeToSocketException(e);
     }
@@ -689,8 +698,12 @@ class BlockSender implements java.io.Closeable {
       checksum.update(buf, dOff, dLen);
       if (!checksum.compare(buf, cOff)) {
         long failedPos = offset + datalen - dLeft;
-        throw new ChecksumException("Checksum failed at " + failedPos,
-            failedPos);
+        StringBuilder replicaInfoString = new StringBuilder();
+        if (replica != null) {
+          replicaInfoString.append(" for replica: " + replica.toString());
+        }
+        throw new ChecksumException("Checksum failed at " + failedPos
+            + replicaInfoString, failedPos);
       }
       dLeft -= dLen;
       dOff += dLen;

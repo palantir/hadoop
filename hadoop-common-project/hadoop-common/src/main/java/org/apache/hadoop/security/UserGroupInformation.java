@@ -17,6 +17,8 @@
  */
 package org.apache.hadoop.security;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN;
+import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN_DEFAULT;
 import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_USER_GROUP_METRICS_PERCENTILES_INTERVALS;
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 
@@ -35,11 +37,11 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import javax.security.auth.Subject;
 import javax.security.auth.callback.CallbackHandler;
@@ -51,14 +53,18 @@ import javax.security.auth.login.LoginContext;
 import javax.security.auth.login.LoginException;
 import javax.security.auth.spi.LoginModule;
 
+import org.apache.hadoop.io.retry.RetryPolicies;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.retry.RetryPolicy;
 import org.apache.hadoop.metrics2.annotation.Metric;
 import org.apache.hadoop.metrics2.annotation.Metrics;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
+import org.apache.hadoop.metrics2.lib.MutableGaugeInt;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 import org.apache.hadoop.metrics2.lib.MutableQuantiles;
 import org.apache.hadoop.metrics2.lib.MutableRate;
 import org.apache.hadoop.security.SaslRpcServer.AuthMethod;
@@ -82,7 +88,8 @@ import org.slf4j.LoggerFactory;
 @InterfaceAudience.LimitedPrivate({"HDFS", "MapReduce", "HBase", "Hive", "Oozie"})
 @InterfaceStability.Evolving
 public class UserGroupInformation {
-  private static final Logger LOG = LoggerFactory.getLogger(
+  @VisibleForTesting
+  static final Logger LOG = LoggerFactory.getLogger(
       UserGroupInformation.class);
 
   /**
@@ -118,6 +125,10 @@ public class UserGroupInformation {
     MutableRate loginFailure;
     @Metric("GetGroups") MutableRate getGroups;
     MutableQuantiles[] getGroupsQuantiles;
+    @Metric("Renewal failures since startup")
+    private MutableGaugeLong renewalFailuresTotal;
+    @Metric("Renewal failures since last successful login")
+    private MutableGaugeInt renewalFailures;
 
     static UgiMetrics create() {
       return DefaultMetricsSystem.instance().register(new UgiMetrics());
@@ -130,6 +141,10 @@ public class UserGroupInformation {
           q.add(latency);
         }
       }
+    }
+
+    MutableGaugeInt getRenewalFailures() {
+      return renewalFailures;
     }
   }
   
@@ -241,13 +256,11 @@ public class UserGroupInformation {
   private static AuthenticationMethod authenticationMethod;
   /** Server-side groups fetching service */
   private static Groups groups;
+  /** Min time (in seconds) before relogin for Kerberos */
+  private static long kerberosMinSecondsBeforeRelogin;
   /** The configuration to use */
   private static Configuration conf;
 
-  
-  /** Leave 10 minutes between relogin attempts. */
-  private static final long MIN_TIME_BEFORE_RELOGIN = 10 * 60 * 1000L;
-  
   /**Environment variable pointing to the token cache file*/
   public static final String HADOOP_TOKEN_FILE_LOCATION = 
     "HADOOP_TOKEN_FILE_LOCATION";
@@ -280,6 +293,16 @@ public class UserGroupInformation {
         throw new RuntimeException(
             "Problem with Kerberos auth_to_local name configuration", ioe);
       }
+    }
+    try {
+        kerberosMinSecondsBeforeRelogin = 1000L * conf.getLong(
+                HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN,
+                HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN_DEFAULT);
+    }
+    catch(NumberFormatException nfe) {
+        throw new IllegalArgumentException("Invalid attribute value for " +
+                HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN + " of " +
+                conf.get(HADOOP_KERBEROS_MIN_SECONDS_BEFORE_RELOGIN));
     }
     // If we haven't set up testing groups, use the configuration to find it
     if (!(groups instanceof TestingGroups)) {
@@ -608,38 +631,27 @@ public class UserGroupInformation {
    * @param subject the user's subject
    */
   UserGroupInformation(Subject subject) {
-    this.subject = subject;
-    this.user = subject.getPrincipals(User.class).iterator().next();
-    this.isKeytab = KerberosUtil.hasKerberosKeyTab(subject);
-    this.isKrbTkt = KerberosUtil.hasKerberosTicket(subject);
+    this(subject, false);
   }
 
   /**
-   * Copies the Subject of this UGI and creates a new UGI with the new subject.
-   * This can be used to add credentials (e.g. tokens) to different copies of
-   * the same UGI, allowing multiple users with different tokens to reuse the
-   * UGI without re-authenticating with Kerberos.
-   * @return clone of the UGI with a new subject.
+   * Create a UGI from the given subject.
+   * @param subject the subject
+   * @param externalKeyTab if the subject's keytab is managed by the user.
+   *                       Setting this to true will prevent UGI from attempting
+   *                       to login the keytab, or to renew it.
    */
-  @InterfaceAudience.Public
-  @InterfaceStability.Evolving
-  public UserGroupInformation copySubjectAndUgi() {
-    Subject subj = getSubject();
-    // The ctor will set other fields automatically from the principals.
-    return new UserGroupInformation(new Subject(false, subj.getPrincipals(),
-        cloneCredentials(subj.getPublicCredentials()),
-        cloneCredentials(subj.getPrivateCredentials())));
-  }
-
-  private static Set<Object> cloneCredentials(Set<Object> old) {
-    Set<Object> set = new HashSet<>();
-    // Make sure Hadoop credentials objects do not reuse the maps.
-    for (Object o : old) {
-      set.add(o instanceof Credentials ? new Credentials((Credentials)o) : o);
+  private UserGroupInformation(Subject subject, final boolean externalKeyTab) {
+    this.subject = subject;
+    this.user = subject.getPrincipals(User.class).iterator().next();
+    if (externalKeyTab) {
+      this.isKeytab = false;
+    } else {
+      this.isKeytab = KerberosUtil.hasKerberosKeyTab(subject);
     }
-    return set;
+    this.isKrbTkt = KerberosUtil.hasKerberosTicket(subject);
   }
-
+  
   /**
    * checks if logged in using kerberos
    * @return true if the subject logged via keytab or has a Kerberos TGT
@@ -826,10 +838,11 @@ public class UserGroupInformation {
           newLoginContext(authenticationMethod.getLoginAppName(), 
                           subject, new HadoopConfiguration());
       login.login();
-      UserGroupInformation realUser = new UserGroupInformation(subject);
+      LOG.debug("Assuming keytab is managed externally since logged in from"
+          + " subject.");
+      UserGroupInformation realUser = new UserGroupInformation(subject, true);
       realUser.setLogin(login);
       realUser.setAuthenticationMethod(authenticationMethod);
-      realUser = new UserGroupInformation(login.getSubject());
       // If the HADOOP_PROXY_USER environment variable or property
       // is specified, create a proxy user as the logged in user.
       String proxyUser = System.getenv(HADOOP_PROXY_USER);
@@ -908,61 +921,109 @@ public class UserGroupInformation {
 
   /**Spawn a thread to do periodic renewals of kerberos credentials*/
   private void spawnAutoRenewalThreadForUserCreds() {
-    if (isSecurityEnabled()) {
-      //spawn thread only if we have kerb credentials
-      if (user.getAuthenticationMethod() == AuthenticationMethod.KERBEROS &&
-          !isKeytab) {
-        Thread t = new Thread(new Runnable() {
-          
-          @Override
-          public void run() {
-            String cmd = conf.get("hadoop.kerberos.kinit.command",
-                                  "kinit");
-            KerberosTicket tgt = getTGT();
+    if (!isSecurityEnabled()
+        || user.getAuthenticationMethod() != AuthenticationMethod.KERBEROS
+        || isKeytab) {
+      return;
+    }
+
+    //spawn thread only if we have kerb credentials
+    Thread t = new Thread(new Runnable() {
+
+      @Override
+      public void run() {
+        String cmd = conf.get("hadoop.kerberos.kinit.command", "kinit");
+        KerberosTicket tgt = getTGT();
+        if (tgt == null) {
+          return;
+        }
+        long nextRefresh = getRefreshTime(tgt);
+        RetryPolicy rp = null;
+        while (true) {
+          try {
+            long now = Time.now();
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Current time is " + now);
+              LOG.debug("Next refresh is " + nextRefresh);
+            }
+            if (now < nextRefresh) {
+              Thread.sleep(nextRefresh - now);
+            }
+            Shell.execCommand(cmd, "-R");
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("renewed ticket");
+            }
+            reloginFromTicketCache();
+            tgt = getTGT();
             if (tgt == null) {
+              LOG.warn("No TGT after renewal. Aborting renew thread for " +
+                  getUserName());
               return;
             }
-            long nextRefresh = getRefreshTime(tgt);
-            while (true) {
-              try {
-                long now = Time.now();
-                if(LOG.isDebugEnabled()) {
-                  LOG.debug("Current time is " + now);
-                  LOG.debug("Next refresh is " + nextRefresh);
-                }
-                if (now < nextRefresh) {
-                  Thread.sleep(nextRefresh - now);
-                }
-                Shell.execCommand(cmd, "-R");
-                if(LOG.isDebugEnabled()) {
-                  LOG.debug("renewed ticket");
-                }
-                reloginFromTicketCache();
-                tgt = getTGT();
-                if (tgt == null) {
-                  LOG.warn("No TGT after renewal. Aborting renew thread for " +
-                           getUserName());
-                  return;
-                }
-                nextRefresh = Math.max(getRefreshTime(tgt),
-                                       now + MIN_TIME_BEFORE_RELOGIN);
-              } catch (InterruptedException ie) {
-                LOG.warn("Terminating renewal thread");
-                return;
-              } catch (IOException ie) {
-                LOG.warn("Exception encountered while running the" +
-                    " renewal command. Aborting renew thread. " + ie);
-                return;
-              }
+            nextRefresh = Math.max(getRefreshTime(tgt),
+              now + kerberosMinSecondsBeforeRelogin);
+            metrics.renewalFailures.set(0);
+            rp = null;
+          } catch (InterruptedException ie) {
+            LOG.warn("Terminating renewal thread");
+            return;
+          } catch (IOException ie) {
+            metrics.renewalFailuresTotal.incr();
+            final long tgtEndTime = tgt.getEndTime().getTime();
+            LOG.warn("Exception encountered while running the renewal "
+                    + "command for {}. (TGT end time:{}, renewalFailures: {},"
+                    + "renewalFailuresTotal: {})", getUserName(), tgtEndTime,
+                metrics.renewalFailures, metrics.renewalFailuresTotal, ie);
+            final long now = Time.now();
+            if (rp == null) {
+              // Use a dummy maxRetries to create the policy. The policy will
+              // only be used to get next retry time with exponential back-off.
+              // The final retry time will be later limited within the
+              // tgt endTime in getNextTgtRenewalTime.
+              rp = RetryPolicies.exponentialBackoffRetry(Long.SIZE - 2,
+                  kerberosMinSecondsBeforeRelogin, TimeUnit.MILLISECONDS);
+            }
+            try {
+              nextRefresh = getNextTgtRenewalTime(tgtEndTime, now, rp);
+            } catch (Exception e) {
+              LOG.error("Exception when calculating next tgt renewal time", e);
+              return;
+            }
+            metrics.renewalFailures.incr();
+            // retry until close enough to tgt endTime.
+            if (now > nextRefresh) {
+              LOG.error("TGT is expired. Aborting renew thread for {}.",
+                  getUserName());
+              return;
             }
           }
-        });
-        t.setDaemon(true);
-        t.setName("TGT Renewer for " + getUserName());
-        t.start();
+        }
       }
-    }
+    });
+    t.setDaemon(true);
+    t.setName("TGT Renewer for " + getUserName());
+    t.start();
   }
+
+  /**
+   * Get time for next login retry. This will allow the thread to retry with
+   * exponential back-off, until tgt endtime.
+   * Last retry is {@link #kerberosMinSecondsBeforeRelogin} before endtime.
+   *
+   * @param tgtEndTime EndTime of the tgt.
+   * @param now Current time.
+   * @param rp The retry policy.
+   * @return Time for next login retry.
+   */
+  @VisibleForTesting
+  static long getNextTgtRenewalTime(final long tgtEndTime, final long now,
+      final RetryPolicy rp) throws Exception {
+    final long lastRetryTime = tgtEndTime - kerberosMinSecondsBeforeRelogin;
+    final RetryPolicy.RetryAction ra = rp.shouldRetry(null,
+        metrics.renewalFailures.value(), 0, false);
+    return Math.min(lastRetryTime, now + ra.delayMillis);
+  }
+
   /**
    * Log a user in from a keytab file. Loads a user identity from a keytab
    * file and logs them in. They become the currently logged-in user.
@@ -1228,10 +1289,10 @@ public class UserGroupInformation {
   }
 
   private boolean hasSufficientTimeElapsed(long now) {
-    if (now - user.getLastLogin() < MIN_TIME_BEFORE_RELOGIN ) {
+    if (now - user.getLastLogin() < kerberosMinSecondsBeforeRelogin ) {
       LOG.warn("Not attempting to re-login since the last re-login was " +
-          "attempted less than " + (MIN_TIME_BEFORE_RELOGIN/1000) + " seconds"+
-          " before. Last Login=" + user.getLastLogin());
+          "attempted less than " + (kerberosMinSecondsBeforeRelogin/1000) +
+          " seconds before. Last Login=" + user.getLastLogin());
       return false;
     }
     return true;
@@ -1771,6 +1832,20 @@ public class UserGroupInformation {
       // would be nice if action included a descriptive toString()
       String where = new Throwable().getStackTrace()[2].toString();
       LOG.debug("PrivilegedAction as:"+this+" from:"+where);
+    }
+  }
+
+  public static void logAllUserInfo(UserGroupInformation ugi) throws
+      IOException {
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("UGI: " + ugi);
+      if (ugi.getRealUser() != null) {
+        LOG.debug("+RealUGI: " + ugi.getRealUser());
+      }
+      LOG.debug("+LoginUGI: " + ugi.getLoginUser());
+      for (Token<?> token : ugi.getTokens()) {
+        LOG.debug("+UGI token:" + token);
+      }
     }
   }
 

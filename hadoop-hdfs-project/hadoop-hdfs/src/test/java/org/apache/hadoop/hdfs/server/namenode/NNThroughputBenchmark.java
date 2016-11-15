@@ -949,7 +949,7 @@ public class NNThroughputBenchmark implements Tool {
       // register datanode
       // TODO:FEDERATION currently a single block pool is supported
       StorageReport[] rep = { new StorageReport(storage, false,
-          DF_CAPACITY, DF_USED, DF_CAPACITY - DF_USED, DF_USED) };
+          DF_CAPACITY, DF_USED, DF_CAPACITY - DF_USED, DF_USED, 0L) };
       DatanodeCommand[] cmds = dataNodeProto.sendHeartbeat(dnRegistration, rep,
           0L, 0L, 0, 0, 0, null, true).getCommands();
       if(cmds != null) {
@@ -998,7 +998,7 @@ public class NNThroughputBenchmark implements Tool {
     int replicateBlocks() throws IOException {
       // register datanode
       StorageReport[] rep = { new StorageReport(storage,
-          false, DF_CAPACITY, DF_USED, DF_CAPACITY - DF_USED, DF_USED) };
+          false, DF_CAPACITY, DF_USED, DF_CAPACITY - DF_USED, DF_USED, 0) };
       DatanodeCommand[] cmds = dataNodeProto.sendHeartbeat(dnRegistration,
           rep, 0L, 0L, 0, 0, 0, null, true).getCommands();
       if (cmds != null) {
@@ -1037,7 +1037,7 @@ public class NNThroughputBenchmark implements Tool {
                   blocks[i], ReceivedDeletedBlockInfo.BlockStatus.RECEIVED_BLOCK,
                   null) };
           StorageReceivedDeletedBlocks[] report = { new StorageReceivedDeletedBlocks(
-              targetStorageID, rdBlocks) };
+              new DatanodeStorage(targetStorageID), rdBlocks) };
           dataNodeProto.blockReceivedAndDeleted(receivedDNReg, bpid, report);
         }
       }
@@ -1157,7 +1157,8 @@ public class NNThroughputBenchmark implements Tool {
               loc.getBlock().getLocalBlock(),
               ReceivedDeletedBlockInfo.BlockStatus.RECEIVED_BLOCK, null) };
           StorageReceivedDeletedBlocks[] report = { new StorageReceivedDeletedBlocks(
-              datanodes[dnIdx].storage.getStorageID(), rdBlocks) };
+              new DatanodeStorage(datanodes[dnIdx].storage.getStorageID()),
+              rdBlocks) };
           dataNodeProto.blockReceivedAndDeleted(datanodes[dnIdx].dnRegistration,
               bpid, report);
         }

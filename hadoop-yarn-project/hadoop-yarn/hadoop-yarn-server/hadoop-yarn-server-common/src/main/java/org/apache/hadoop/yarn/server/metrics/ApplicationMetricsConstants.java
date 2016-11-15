@@ -76,6 +76,12 @@ public class ApplicationMetricsConstants {
   public static final String APP_MEM_METRICS =
       "YARN_APPLICATION_MEM_METRIC";
 
+  public static final String APP_CPU_PREEMPT_METRICS =
+      "YARN_APPLICATION_CPU_PREEMPT_METRIC";
+
+  public static final String APP_MEM_PREEMPT_METRICS =
+      "YARN_APPLICATION_MEM_PREEMPT_METRIC";
+
   public static final String LATEST_APP_ATTEMPT_EVENT_INFO =
       "YARN_APPLICATION_LATEST_APP_ATTEMPT";
   
@@ -98,4 +104,7 @@ public class ApplicationMetricsConstants {
 
   public static final String AM_NODE_LABEL_EXPRESSION =
       "YARN_AM_NODE_LABEL_EXPRESSION";
+
+  public static final String AM_CONTAINER_LAUNCH_COMMAND =
+      "YARN_AM_CONTAINER_LAUNCH_COMMAND";
 }

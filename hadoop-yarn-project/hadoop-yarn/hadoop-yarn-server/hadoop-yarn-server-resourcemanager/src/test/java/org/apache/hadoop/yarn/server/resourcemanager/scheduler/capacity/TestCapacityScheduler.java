@@ -58,9 +58,9 @@ import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.ContainerResourceChangeRequest;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
+import org.apache.hadoop.yarn.api.records.ContainerUpdateType;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Priority;
@@ -70,6 +70,7 @@ import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.event.Dispatcher;
@@ -2930,12 +2931,14 @@ public class TestCapacityScheduler {
   @Test(timeout = 30000)
   public void testAMUsedResource() throws Exception {
     MockRM rm = setUpMove();
+    rm.registerNode("127.0.0.1:1234", 4 * GB);
+
     Configuration conf = rm.getConfig();
     int minAllocMb =
         conf.getInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB,
             YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_MB);
     int amMemory = 50;
-    assertTrue("AM memory is greater than or equql to minAllocation",
+    assertTrue("AM memory is greater than or equal to minAllocation",
         amMemory < minAllocMb);
     Resource minAllocResource = Resource.newInstance(minAllocMb, 1);
     String queueName = "a1";
@@ -3229,9 +3232,10 @@ public class TestCapacityScheduler {
 
     // am1 asks to change its AM container from 1GB to 3GB
     am1.sendContainerResizingRequest(Arrays.asList(
-            ContainerResourceChangeRequest
-                .newInstance(containerId1, Resources.createResource(3 * GB))),
-        null);
+            UpdateContainerRequest
+                .newInstance(0, containerId1,
+                    ContainerUpdateType.INCREASE_RESOURCE,
+                    Resources.createResource(3 * GB))));
     
     FiCaSchedulerApp app = getFiCaSchedulerApp(rm, app1.getApplicationId());
     
@@ -3243,11 +3247,14 @@ public class TestCapacityScheduler {
     
     // am1 asks to change containerId2 (2G -> 3G) and containerId3 (2G -> 5G)
     am1.sendContainerResizingRequest(Arrays.asList(
-            ContainerResourceChangeRequest
-                .newInstance(containerId2, Resources.createResource(3 * GB)),
-            ContainerResourceChangeRequest
-                .newInstance(containerId3, Resources.createResource(5 * GB))),
-        null);
+        UpdateContainerRequest
+                .newInstance(0, containerId2,
+                    ContainerUpdateType.INCREASE_RESOURCE,
+                    Resources.createResource(3 * GB)),
+        UpdateContainerRequest
+                .newInstance(0, containerId3,
+                    ContainerUpdateType.INCREASE_RESOURCE,
+                    Resources.createResource(5 * GB))));
     
     Assert.assertEquals(6 * GB,
         app.getAppAttemptResourceUsage().getPending().getMemorySize());
@@ -3258,13 +3265,18 @@ public class TestCapacityScheduler {
     // am1 asks to change containerId1 (1G->3G), containerId2 (2G -> 4G) and
     // containerId3 (2G -> 2G)
     am1.sendContainerResizingRequest(Arrays.asList(
-            ContainerResourceChangeRequest
-                .newInstance(containerId1, Resources.createResource(3 * GB)),
-            ContainerResourceChangeRequest
-                .newInstance(containerId2, Resources.createResource(4 * GB)),
-            ContainerResourceChangeRequest
-                .newInstance(containerId3, Resources.createResource(2 * GB))),
-        null);
+        UpdateContainerRequest
+                .newInstance(0, containerId1,
+                    ContainerUpdateType.INCREASE_RESOURCE,
+                    Resources.createResource(3 * GB)),
+        UpdateContainerRequest
+                .newInstance(0, containerId2,
+                    ContainerUpdateType.INCREASE_RESOURCE,
+                    Resources.createResource(4 * GB)),
+        UpdateContainerRequest
+                .newInstance(0, containerId3,
+                    ContainerUpdateType.INCREASE_RESOURCE,
+                    Resources.createResource(2 * GB))));
     Assert.assertEquals(4 * GB,
         app.getAppAttemptResourceUsage().getPending().getMemorySize());
     checkPendingResource(rm, "a1", 4 * GB, null);
@@ -3275,6 +3287,7 @@ public class TestCapacityScheduler {
   private void verifyAMLimitForLeafQueue(CapacitySchedulerConfiguration config)
       throws Exception {
     MockRM rm = setUpMove(config);
+    rm.registerNode("127.0.0.1:1234", 2 * GB);
 
     String queueName = "a1";
     String userName = "user_0";
@@ -3596,7 +3609,7 @@ public class TestCapacityScheduler {
     }
     assertEquals("A Used Resource should be 2 GB", 2 * GB,
         cs.getQueue("a").getUsedResources().getMemorySize());
-    assertEquals("B Used Resource should be 2 GB", 13 * GB,
+    assertEquals("B Used Resource should be 13 GB", 13 * GB,
         cs.getQueue("b").getUsedResources().getMemorySize());
     r1 = TestUtils.createResourceRequest(
         ResourceRequest.ANY, 2 * GB, 1, true, priority, recordFactory);
@@ -3620,10 +3633,14 @@ public class TestCapacityScheduler {
     ContainerId containerId2 =ContainerId.newContainerId(appAttemptId2, 11);
 
     cs.handle(new ContainerExpiredSchedulerEvent(containerId1));
+    rm.drainEvents();
+    CapacityScheduler.schedule(cs);
+
     cs.handle(new ContainerExpiredSchedulerEvent(containerId2));
     CapacityScheduler.schedule(cs);
     rm.drainEvents();
-    assertEquals("A Used Resource should be 2 GB", 4 * GB,
+
+    assertEquals("A Used Resource should be 4 GB", 4 * GB,
         cs.getQueue("a").getUsedResources().getMemorySize());
     assertEquals("B Used Resource should be 12 GB", 12 * GB,
         cs.getQueue("b").getUsedResources().getMemorySize());

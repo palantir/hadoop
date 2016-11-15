@@ -59,7 +59,8 @@ enum errorcodes {
   TRAFFIC_CONTROL_EXECUTION_FAILED = 28,
   DOCKER_RUN_FAILED=29,
   ERROR_OPENING_FILE = 30,
-  ERROR_READING_FILE = 31
+  ERROR_READING_FILE = 31,
+  FEATURE_DISABLED = 32
 };
 
 enum operations {
@@ -86,6 +87,8 @@ enum operations {
 #define BANNED_USERS_KEY "banned.users"
 #define ALLOWED_SYSTEM_USERS_KEY "allowed.system.users"
 #define DOCKER_BINARY_KEY "docker.binary"
+#define DOCKER_SUPPORT_ENABLED_KEY "feature.docker.enabled"
+#define TC_SUPPORT_ENABLED_KEY "feature.tc.enabled"
 #define TMP_DIR "tmp"
 
 extern struct passwd *user_detail;
@@ -95,9 +98,14 @@ extern FILE *LOGFILE;
 // the log file for error messages
 extern FILE *ERRORFILE;
 
-
 // get the executable's filename
 char* get_executable();
+
+//function used to load the configurations present in the secure config
+void read_executor_config(const char* file_name);
+
+//Lookup nodemanager group from container executor configuration.
+char *get_nodemanager_group();
 
 /**
  * Check the permissions on the container-executor to make sure that security is
@@ -110,6 +118,12 @@ char* get_executable();
  * @return -1 on error 0 on success.
  */
 int check_executor_permissions(char *executable_file);
+
+//function used to load the configurations present in the secure config.
+void read_executor_config(const char* file_name);
+
+//function used to free executor configuration data
+void free_executor_configurations();
 
 // initialize the application directory
 int initialize_app(const char *user, const char *app_id,
@@ -238,6 +252,12 @@ int check_dir(const char* npath, mode_t st_mode, mode_t desired,
 int create_validate_dir(const char* npath, mode_t perm, const char* path,
    int finalComponent);
 
+/** Check if tc (traffic control) support is enabled in configuration. */
+int is_tc_support_enabled();
+
+/** Check if docker support is enabled in configuration. */
+int is_docker_support_enabled();
+
 /**
  * Run a batch of tc commands that modify interface configuration
  */
@@ -262,13 +282,3 @@ int traffic_control_read_stats(char *command_file);
  * Run a docker command passing the command file as an argument
  */
 int run_docker(const char *command_file);
-
-/**
- * Function to prepare the container directories.
- * It creates the container work and log directories.
- */
-int create_container_directories(const char* user, const char *app_id,
-                     const char *container_id, char* const* local_dir,
-                     char* const* log_dir, const char *work_dir);
-
-int create_log_dirs(const char *app_id, char * const * log_dirs);

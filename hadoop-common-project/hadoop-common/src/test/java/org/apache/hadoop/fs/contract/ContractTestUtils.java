@@ -47,6 +47,9 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.UUID;
 
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_DEFAULT;
+import static org.apache.hadoop.fs.CommonConfigurationKeysPublic.IO_FILE_BUFFER_SIZE_KEY;
+
 /**
  * Utilities used across test cases.
  */
@@ -54,8 +57,6 @@ public class ContractTestUtils extends Assert {
 
   private static final Logger LOG =
       LoggerFactory.getLogger(ContractTestUtils.class);
-
-  public static final String IO_FILE_BUFFER_SIZE = "io.file.buffer.size";
 
   // For scale testing, we can repeatedly write small chunk data to generate
   // a large file.
@@ -150,8 +151,8 @@ public class ContractTestUtils extends Assert {
     FSDataOutputStream out = fs.create(path,
                                        overwrite,
                                        fs.getConf()
-                                         .getInt(IO_FILE_BUFFER_SIZE,
-                                                 4096),
+                                         .getInt(IO_FILE_BUFFER_SIZE_KEY,
+                                             IO_FILE_BUFFER_SIZE_DEFAULT),
                                        (short) 1,
                                        buffersize);
     out.write(src, 0, len);
@@ -392,6 +393,45 @@ public class ContractTestUtils extends Assert {
     rejectRootOperation(path, false);
   }
 
+  /**
+   * List then delete the children of a path, but not the path itself.
+   * This can be used to delete the entries under a root path when that
+   * FS does not support {@code delete("/")}.
+   * @param fileSystem filesystem
+   * @param path path to delete
+   * @param recursive flag to indicate child entry deletion should be recursive
+   * @return the immediate child entries found and deleted (not including
+   * any recursive children of those entries)
+   * @throws IOException problem in the deletion process.
+   */
+  public static FileStatus[] deleteChildren(FileSystem fileSystem,
+      Path path,
+      boolean recursive) throws IOException {
+    FileStatus[] children = listChildren(fileSystem, path);
+    for (FileStatus entry : children) {
+      fileSystem.delete(entry.getPath(), recursive);
+    }
+    return children;
+  }
+
+  /**
+   * List all children of a path, but not the path itself in the case
+   * that the path refers to a file or empty directory.
+   * @param fileSystem FS
+   * @param path path
+   * @return a list of children, and never the path itself.
+   * @throws IOException problem in the list process
+   */
+  public static FileStatus[] listChildren(FileSystem fileSystem,
+      Path path) throws IOException {
+    FileStatus[] entries = fileSystem.listStatus(path);
+    if (entries.length == 1 && path.equals(entries[0].getPath())) {
+      // this is the path: ignore
+      return new FileStatus[]{};
+    } else {
+      return entries;
+    }
+  }
 
   public static void noteAction(String action) {
     if (LOG.isDebugEnabled()) {
@@ -794,6 +834,7 @@ public class ContractTestUtils extends Assert {
 
     long totalBytesRead = 0;
     int nextExpectedNumber = 0;
+    NanoTimer timer = new NanoTimer();
     try (InputStream inputStream = fs.open(path)) {
       while (true) {
         final int bytesRead = inputStream.read(testBuffer);
@@ -822,6 +863,8 @@ public class ContractTestUtils extends Assert {
             " bytes but only received " + totalBytesRead);
       }
     }
+    timer.end("Time to read %d bytes", expectedSize);
+    bandwidth(timer, expectedSize);
   }
 
   /**
@@ -885,9 +928,12 @@ public class ContractTestUtils extends Assert {
     final Path objectPath = new Path(parent, objectName);
 
     // Write test file in a specific pattern
+    NanoTimer timer = new NanoTimer();
     assertEquals(fileSize,
         generateTestFile(fs, objectPath, fileSize, testBufferSize, modulus));
     assertPathExists(fs, "not created successful", objectPath);
+    timer.end("Time to write %d bytes", fileSize);
+    bandwidth(timer, fileSize);
 
     // Now read the same file back and verify its content
     try {
@@ -925,7 +971,7 @@ public class ContractTestUtils extends Assert {
    * @return the number of megabytes/second of the recorded operation
    */
   public static double bandwidthMBs(long bytes, long durationNS) {
-    return (bytes * 1000.0) / durationNS;
+    return bytes / (1024.0 * 1024) * 1.0e9 / durationNS;
   }
 
   /**
@@ -1375,6 +1421,14 @@ public class ContractTestUtils extends Assert {
       return endTime - startTime;
     }
 
+    /**
+     * Intermediate duration of the operation.
+     * @return how much time has passed since the start (in nanos).
+     */
+    public long elapsedTime() {
+      return now() - startTime;
+    }
+
     public double bandwidth(long bytes) {
       return bandwidthMBs(bytes, duration());
     }
@@ -1382,10 +1436,12 @@ public class ContractTestUtils extends Assert {
     /**
      * Bandwidth as bytes per second.
      * @param bytes bytes in
-     * @return the number of bytes per second this operation timed.
+     * @return the number of bytes per second this operation.
+     *         0 if duration == 0.
      */
     public double bandwidthBytes(long bytes) {
-      return (bytes * 1.0) / duration();
+      double duration = duration();
+      return duration > 0 ? bytes / duration : 0;
     }
 
     /**

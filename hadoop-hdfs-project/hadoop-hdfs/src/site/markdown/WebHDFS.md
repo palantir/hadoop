@@ -169,7 +169,7 @@ The HTTP REST API supports the complete [FileSystem](../../api/org/apache/hadoop
 *   HTTP POST
     * [`APPEND`](#Append_to_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).append)
     * [`CONCAT`](#Concat_Files) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).concat)
-    * [`TRUNCATE`](#Truncate_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).concat)
+    * [`TRUNCATE`](#Truncate_a_File) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).truncate)
 *   HTTP DELETE
     * [`DELETE`](#Delete_a_FileDirectory) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).delete)
     * [`DELETESNAPSHOT`](#Delete_Snapshot) (see [FileSystem](../../api/org/apache/hadoop/fs/FileSystem.html).deleteSnapshot)
@@ -1163,7 +1163,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
       {
         "entries":
         {
-          "type": "array"
+          "type": "array",
           "items":
           {
             "description": "ACL entry.",
@@ -1187,7 +1187,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
           "description": "True if the sticky bit is on.",
           "type"       : "boolean",
           "required"   : true
-        },
+        }
       }
     }
   }
@@ -1206,7 +1206,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
       "type"      : "array",
       "items":
       {
-        "type"    " "object",
+        "type"    : "object",
         "properties":
         {
           "name":
@@ -1237,7 +1237,7 @@ All operations, except for [`OPEN`](#Open_and_Read_a_File), either return a zero
     "XAttrNames":
     {
       "description": "XAttr names.",
-      "type"       : "string"
+      "type"       : "string",
       "required"   : true
     }
   }
@@ -1606,7 +1606,7 @@ See also: [`GETHOMEDIRECTORY`](#Get_Home_Directory), [Path](../../api/org/apache
         "javaClassName":                                     //an optional property
         {
           "description": "Java class name of the exception",
-          "type"       : "string",
+          "type"       : "string"
         }
       }
     }

@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.FsAction;
+import org.apache.hadoop.fs.Trash;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.Time;
@@ -287,7 +288,7 @@ public class TestDFSPermission {
     fs.setPermission(new Path("/"),
         FsPermission.createImmutable((short)0777));
   }
-  
+
   /* check if the ownership of a file/directory is set correctly */
   @Test
   public void testOwnership() throws Exception {
@@ -324,7 +325,7 @@ public class TestDFSPermission {
     setOwner(FILE_DIR_PATH, USER1.getShortUserName(), GROUP3_NAME, false);
 
     // case 3: user1 changes FILE_DIR_PATH's owner to be user2
-    login(USER1);
+    fs = DFSTestUtil.login(fs, conf, USER1);
     setOwner(FILE_DIR_PATH, USER2.getShortUserName(), null, true);
 
     // case 4: user1 changes FILE_DIR_PATH's group to be group1 which it belongs
@@ -336,14 +337,14 @@ public class TestDFSPermission {
     setOwner(FILE_DIR_PATH, null, GROUP3_NAME, true);
 
     // case 6: user2 (non-owner) changes FILE_DIR_PATH's group to be group3
-    login(USER2);
+    fs = DFSTestUtil.login(fs, conf, USER2);
     setOwner(FILE_DIR_PATH, null, GROUP3_NAME, true);
 
     // case 7: user2 (non-owner) changes FILE_DIR_PATH's user to be user2
     setOwner(FILE_DIR_PATH, USER2.getShortUserName(), null, true);
 
     // delete the file/directory
-    login(SUPERUSER);
+    fs = DFSTestUtil.login(fs, conf, SUPERUSER);
     fs.delete(FILE_DIR_PATH, true);
   }
 
@@ -566,11 +567,12 @@ public class TestDFSPermission {
       fs.exists(nfpath);
       fail("The exists call should have failed.");
     } catch (AccessControlException e) {
-      assertTrue("Permission denied messages must carry file path",
+      assertFalse("Permission denied messages must not carry full file path,"
+              + "since the user does not have permission on /p4: "
+              + e.getMessage(),
           e.getMessage().contains(fpath.getName()));
-      assertFalse("Permission denied messages should not specify existing_file"
-              + " is not a directory, since the user does not have permission"
-              + " on /p4",
+      assertFalse("Permission denied messages must not specify /p4"
+          + " is not a directory: " + e.getMessage(),
           e.getMessage().contains("is not a directory"));
     }
   }
@@ -584,7 +586,7 @@ public class TestDFSPermission {
       short[] filePermission, Path[] parentDirs, Path[] files, Path[] dirs)
       throws Exception {
     boolean[] isDirEmpty = new boolean[NUM_TEST_PERMISSIONS];
-    login(SUPERUSER);
+    fs = DFSTestUtil.login(fs, conf, SUPERUSER);
     for (int i = 0; i < NUM_TEST_PERMISSIONS; i++) {
       create(OpType.CREATE, files[i]);
       create(OpType.MKDIRS, dirs[i]);
@@ -600,7 +602,7 @@ public class TestDFSPermission {
       isDirEmpty[i] = (fs.listStatus(dirs[i]).length == 0);
     }
 
-    login(ugi);
+    fs = DFSTestUtil.login(fs, conf, ugi);
     for (int i = 0; i < NUM_TEST_PERMISSIONS; i++) {
       testCreateMkdirs(ugi, new Path(parentDirs[i], FILE_DIR_NAME),
           ancestorPermission[i], parentPermission[i]);
@@ -1153,16 +1155,6 @@ public class TestDFSPermission {
     ddpv.set(path, ancestorPermission, parentPermission, permission,
         childPermissions);
     ddpv.verifyPermission(ugi);
-  }
-
-  /* log into dfs as the given user */
-  private void login(UserGroupInformation ugi) throws IOException,
-      InterruptedException {
-    if (fs != null) {
-      fs.close();
-    }
-
-    fs = DFSTestUtil.getFileSystemAs(ugi, conf);
   }
 
   /* test non-existent file */

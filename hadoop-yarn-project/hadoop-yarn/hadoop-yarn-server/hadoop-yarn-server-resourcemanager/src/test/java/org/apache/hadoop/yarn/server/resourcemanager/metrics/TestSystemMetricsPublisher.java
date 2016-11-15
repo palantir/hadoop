@@ -22,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Map;
@@ -33,6 +34,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
+import org.apache.hadoop.yarn.api.records.ContainerLaunchContext;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -118,6 +120,11 @@ public class TestSystemMetricsPublisher {
         when(asc.getUnmanagedAM()).thenReturn(false);
         when(asc.getPriority()).thenReturn(Priority.newInstance(1));
         when(asc.getNodeLabelExpression()).thenReturn("high-cpu");
+        ContainerLaunchContext containerLaunchContext =
+            mock(ContainerLaunchContext.class);
+        when(containerLaunchContext.getCommands())
+            .thenReturn(Collections.singletonList("java -Xmx1024m"));
+        when(asc.getAMContainerSpec()).thenReturn(containerLaunchContext);
         when(app.getApplicationSubmissionContext()).thenReturn(asc);
         metricsPublisher.appUpdated(app, 4L);
       } else {
@@ -197,6 +204,11 @@ public class TestSystemMetricsPublisher {
         Assert.assertEquals("uers1,user2",
             entity.getOtherInfo().get(
                 ApplicationMetricsConstants.APP_VIEW_ACLS_ENTITY_INFO));
+        Assert.assertEquals(
+            app.getApplicationSubmissionContext().getAMContainerSpec()
+                .getCommands(),
+            entity.getOtherInfo()
+                .get(ApplicationMetricsConstants.AM_CONTAINER_LAUNCH_COMMAND));
       } else {
         Assert.assertEquals(
             "",
@@ -210,6 +222,16 @@ public class TestSystemMetricsPublisher {
             app.getRMAppMetrics().getVcoreSeconds(),
             Long.parseLong(entity.getOtherInfo()
                 .get(ApplicationMetricsConstants.APP_CPU_METRICS).toString()));
+        Assert.assertEquals(
+            app.getRMAppMetrics().getPreemptedMemorySeconds(),
+            Long.parseLong(entity.getOtherInfo()
+                .get(ApplicationMetricsConstants.APP_MEM_PREEMPT_METRICS)
+                .toString()));
+        Assert.assertEquals(
+            app.getRMAppMetrics().getPreemptedVcoreSeconds(),
+            Long.parseLong(entity.getOtherInfo()
+                .get(ApplicationMetricsConstants.APP_CPU_PREEMPT_METRICS)
+                .toString()));
       }
       Assert.assertEquals("context", entity.getOtherInfo()
           .get(ApplicationMetricsConstants.YARN_APP_CALLER_CONTEXT));
@@ -483,7 +505,8 @@ public class TestSystemMetricsPublisher {
     when(app.getFinalApplicationStatus()).thenReturn(
         FinalApplicationStatus.UNDEFINED);
     when(app.getRMAppMetrics()).thenReturn(
-        new RMAppMetrics(null, 0, 0, Integer.MAX_VALUE, Long.MAX_VALUE));
+        new RMAppMetrics(null, 0, 0, Integer.MAX_VALUE, Long.MAX_VALUE,
+            Integer.MAX_VALUE, Long.MAX_VALUE));
     Set<String> appTags = new HashSet<String>();
     appTags.add("test");
     appTags.add("tags");
@@ -492,6 +515,11 @@ public class TestSystemMetricsPublisher {
     when(asc.getUnmanagedAM()).thenReturn(false);
     when(asc.getPriority()).thenReturn(Priority.newInstance(10));
     when(asc.getNodeLabelExpression()).thenReturn("high-cpu");
+    ContainerLaunchContext containerLaunchContext =
+        mock(ContainerLaunchContext.class);
+    when(containerLaunchContext.getCommands())
+        .thenReturn(Collections.singletonList("java -Xmx1024m"));
+    when(asc.getAMContainerSpec()).thenReturn(containerLaunchContext);
     when(app.getApplicationSubmissionContext()).thenReturn(asc);
     when(app.getAppNodeLabelExpression()).thenCallRealMethod();
     ResourceRequest amReq = mock(ResourceRequest.class);

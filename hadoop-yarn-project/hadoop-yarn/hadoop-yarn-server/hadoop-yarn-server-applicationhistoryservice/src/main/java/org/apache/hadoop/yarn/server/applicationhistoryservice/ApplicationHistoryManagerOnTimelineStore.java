@@ -334,9 +334,15 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
                 ApplicationMetricsConstants.APP_CPU_METRICS).toString());
         long memorySeconds=Long.parseLong(entityInfo.get(
                 ApplicationMetricsConstants.APP_MEM_METRICS).toString());
+        long preemptedMemorySeconds = Long.parseLong(entityInfo.get(
+            ApplicationMetricsConstants
+                .APP_MEM_PREEMPT_METRICS).toString());
+        long preemptedVcoreSeconds = Long.parseLong(entityInfo.get(
+            ApplicationMetricsConstants
+                .APP_CPU_PREEMPT_METRICS).toString());
         appResources = ApplicationResourceUsageReport
             .newInstance(0, 0, null, null, null, memorySeconds, vcoreSeconds, 0,
-                0);
+                0, preemptedMemorySeconds, preemptedVcoreSeconds);
       }
       if (entityInfo.containsKey(ApplicationMetricsConstants.APP_TAGS_INFO)) {
         appTags = new HashSet<String>();
@@ -351,6 +357,7 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
       }
     }
     List<TimelineEvent> events = entity.getEvents();
+    long updatedTimeStamp = 0L;
     if (events != null) {
       for (TimelineEvent event : events) {
         if (event.getEventType().equals(
@@ -358,9 +365,16 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
           createdTime = event.getTimestamp();
         } else if (event.getEventType().equals(
             ApplicationMetricsConstants.UPDATED_EVENT_TYPE)) {
-          // TODO: YARN-5101. This type of events are parsed in
-          // time-stamp descending order which means the previous event
-          // could override the information from the later same type of event.
+          // This type of events are parsed in time-stamp descending order
+          // which means the previous event could override the information
+          // from the later same type of event. Hence compare timestamp
+          // before over writing.
+          if (event.getTimestamp() > updatedTimeStamp) {
+            updatedTimeStamp = event.getTimestamp();
+          } else {
+            continue;
+          }
+
           Map<String, Object> eventInfo = event.getEventInfo();
           if (eventInfo == null) {
             continue;

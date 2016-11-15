@@ -233,6 +233,11 @@ public class TestApplicationHistoryManagerOnTimelineStore {
           applicationResourceUsageReport.getMemorySeconds());
       Assert
           .assertEquals(345, applicationResourceUsageReport.getVcoreSeconds());
+      Assert.assertEquals(456,
+          applicationResourceUsageReport.getPreemptedMemorySeconds());
+      Assert
+          .assertEquals(789, applicationResourceUsageReport
+              .getPreemptedVcoreSeconds());
       Assert.assertEquals(FinalApplicationStatus.UNDEFINED,
           app.getFinalApplicationStatus());
       Assert.assertEquals(YarnApplicationState.FINISHED,
@@ -490,8 +495,10 @@ public class TestApplicationHistoryManagerOnTimelineStore {
         Priority.newInstance(0));
     entityInfo.put(ApplicationMetricsConstants.SUBMITTED_TIME_ENTITY_INFO,
         Integer.MAX_VALUE + 1L);
-    entityInfo.put(ApplicationMetricsConstants.APP_MEM_METRICS,123);
-    entityInfo.put(ApplicationMetricsConstants.APP_CPU_METRICS,345);
+    entityInfo.put(ApplicationMetricsConstants.APP_MEM_METRICS, 123);
+    entityInfo.put(ApplicationMetricsConstants.APP_CPU_METRICS, 345);
+    entityInfo.put(ApplicationMetricsConstants.APP_MEM_PREEMPT_METRICS,456);
+    entityInfo.put(ApplicationMetricsConstants.APP_CPU_PREEMPT_METRICS,789);
     if (emptyACLs) {
       entityInfo.put(ApplicationMetricsConstants.APP_VIEW_ACLS_ENTITY_INFO, "");
     } else {
@@ -538,23 +545,27 @@ public class TestApplicationHistoryManagerOnTimelineStore {
     entity.addEvent(tEvent);
     if (enableUpdateEvent) {
       tEvent = new TimelineEvent();
-      createAppModifiedEvent(appId, tEvent, "changed queue", 5);
+      long updatedTimeIndex = 4L;
+      createAppModifiedEvent(appId, tEvent, updatedTimeIndex++, "changed queue",
+          5);
       entity.addEvent(tEvent);
       // Change priority alone
       tEvent = new TimelineEvent();
-      createAppModifiedEvent(appId, tEvent, "changed queue", 6);
+      createAppModifiedEvent(appId, tEvent, updatedTimeIndex++, "changed queue",
+          6);
       // Now change queue
       tEvent = new TimelineEvent();
-      createAppModifiedEvent(appId, tEvent, "changed queue1", 6);
+      createAppModifiedEvent(appId, tEvent, updatedTimeIndex++,
+          "changed queue1", 6);
       entity.addEvent(tEvent);
     }
     return entity;
   }
 
   private static void createAppModifiedEvent(ApplicationId appId,
-      TimelineEvent tEvent, String queue, int priority) {
+      TimelineEvent tEvent, long updatedTimeIndex, String queue, int priority) {
     tEvent.setEventType(ApplicationMetricsConstants.UPDATED_EVENT_TYPE);
-    tEvent.setTimestamp(Integer.MAX_VALUE + 4L + appId.getId());
+    tEvent.setTimestamp(Integer.MAX_VALUE + updatedTimeIndex + appId.getId());
     Map<String, Object> eventInfo = new HashMap<String, Object>();
     eventInfo.put(ApplicationMetricsConstants.QUEUE_ENTITY_INFO, queue);
     eventInfo.put(ApplicationMetricsConstants.APPLICATION_PRIORITY_INFO,

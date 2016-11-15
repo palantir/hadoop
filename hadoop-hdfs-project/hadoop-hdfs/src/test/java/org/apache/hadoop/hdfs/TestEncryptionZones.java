@@ -19,7 +19,6 @@ package org.apache.hadoop.hdfs;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.io.RandomAccessFile;
@@ -45,7 +44,9 @@ import org.apache.hadoop.crypto.CipherSuite;
 import org.apache.hadoop.crypto.CryptoProtocolVersion;
 import org.apache.hadoop.crypto.key.JavaKeyStoreProvider;
 import org.apache.hadoop.crypto.key.KeyProvider;
+import org.apache.hadoop.crypto.key.KeyProviderCryptoExtension;
 import org.apache.hadoop.crypto.key.KeyProviderFactory;
+import org.apache.hadoop.crypto.key.kms.server.EagerKeyGeneratorKeyProviderCryptoExtension;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.CreateFlag;
 import org.apache.hadoop.fs.FSDataOutputStream;
@@ -92,9 +93,12 @@ import org.apache.log4j.Logger;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.Timeout;
 import org.mockito.Mockito;
 
+import static org.junit.Assert.assertNotNull;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyObject;
@@ -143,6 +147,9 @@ public class TestEncryptionZones {
       new Path(testRootDir.toString(), "test.jks").toUri();
   }
 
+  @Rule
+  public Timeout globalTimeout = new Timeout(120 * 1000);
+
   @Before
   public void setup() throws Exception {
     conf = new HdfsConfiguration();
@@ -150,12 +157,14 @@ public class TestEncryptionZones {
     // Set up java key store
     String testRoot = fsHelper.getTestRootDir();
     testRootDir = new File(testRoot).getAbsoluteFile();
-    conf.set(DFSConfigKeys.DFS_ENCRYPTION_KEY_PROVIDER_URI, getKeyProviderURI());
+    conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH,
+        getKeyProviderURI());
     conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY, true);
     // Lower the batch size for testing
     conf.setInt(DFSConfigKeys.DFS_NAMENODE_LIST_ENCRYPTION_ZONES_NUM_RESPONSES,
         2);
     cluster = new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
     Logger.getLogger(EncryptionZoneManager.class).setLevel(Level.TRACE);
     fs = cluster.getFileSystem();
     fsWrapper = new FileSystemTestWrapper(fs);
@@ -227,7 +236,7 @@ public class TestEncryptionZones {
    * with sticky bits.
    * @throws Exception
    */
-  @Test(timeout = 60000)
+  @Test
   public void testTrashStickyBit() throws Exception {
     // create an EZ /zones/zone1, make it world writable.
     final Path zoneParent = new Path("/zones");
@@ -290,7 +299,7 @@ public class TestEncryptionZones {
    * with sticky bits.
    * @throws Exception
    */
-  @Test(timeout = 60000)
+  @Test
   public void testProvisionTrash() throws Exception {
     // create an EZ /zones/zone1
     final Path zoneParent = new Path("/zones");
@@ -322,11 +331,14 @@ public class TestEncryptionZones {
     assertTrue(trashFileStatus.getPermission().getStickyBit());
   }
 
-  @Test(timeout = 60000)
+  // CHECKSTYLE:OFF:MethodLengthCheck
+  @Test
   public void testBasicOperations() throws Exception {
 
     int numZones = 0;
-
+    /* Number of EZs should be 0 if no EZ is created */
+    assertEquals("Unexpected number of encryption zones!", numZones,
+        cluster.getNamesystem().getNumEncryptionZones());
     /* Test failure of create EZ on a directory that doesn't exist. */
     final Path zoneParent = new Path("/zones");
     final Path zone1 = new Path(zoneParent, "zone1");
@@ -479,8 +491,9 @@ public class TestEncryptionZones {
     assertNumZones(numZones);
     assertZonePresent(null, nonpersistZone.toString());
   }
+  // CHECKSTYLE:ON:MethodLengthCheck
 
-  @Test(timeout = 60000)
+  @Test
   public void testBasicOperationsRootDir() throws Exception {
     int numZones = 0;
     final Path rootDir = new Path("/");
@@ -504,7 +517,7 @@ public class TestEncryptionZones {
   /**
    * Test listing encryption zones as a non super user.
    */
-  @Test(timeout = 60000)
+  @Test
   public void testListEncryptionZonesAsNonSuperUser() throws Exception {
 
     final UserGroupInformation user = UserGroupInformation.
@@ -538,7 +551,7 @@ public class TestEncryptionZones {
   /**
    * Test getEncryptionZoneForPath as a non super user.
    */
-  @Test(timeout = 60000)
+  @Test
   public void testGetEZAsNonSuperUser() throws Exception {
 
     final UserGroupInformation user = UserGroupInformation.
@@ -599,13 +612,8 @@ public class TestEncryptionZones {
           assertExceptionContains("Permission denied:", e);
         }
 
-        try {
-          userAdmin.getEncryptionZoneForPath(nonexistent);
-          fail("FileNotFoundException should be thrown for a non-existent"
-              + " file path");
-        } catch (FileNotFoundException e) {
-          assertExceptionContains("Path not found: " + nonexistent, e);
-        }
+        assertNull("expected null for nonexistent path",
+            userAdmin.getEncryptionZoneForPath(nonexistent));
 
         // Check operation with non-ez paths
         assertNull("expected null for non-ez path",
@@ -633,20 +641,10 @@ public class TestEncryptionZones {
         assertEquals("expected ez path", allPath.toString(),
             userAdmin.getEncryptionZoneForPath(
                 new Path(snapshottedAllPath)).getPath().toString());
-        try {
-          userAdmin.getEncryptionZoneForPath(allPathFile);
-          fail("FileNotFoundException should be thrown for a non-existent"
-              + " file path");
-        } catch (FileNotFoundException e) {
-          assertExceptionContains("Path not found: " + allPathFile, e);
-        }
-        try {
-          userAdmin.getEncryptionZoneForPath(allPath);
-          fail("FileNotFoundException should be thrown for a non-existent"
-              + " file path");
-        } catch (FileNotFoundException e) {
-          assertExceptionContains("Path not found: " + allPath, e);
-        }
+        assertNull("expected null for deleted file path",
+            userAdmin.getEncryptionZoneForPath(allPathFile));
+        assertNull("expected null for deleted directory path",
+            userAdmin.getEncryptionZoneForPath(allPath));
         return null;
       }
     });
@@ -697,12 +695,12 @@ public class TestEncryptionZones {
     }
   }
 
-  @Test(timeout = 60000)
+  @Test
   public void testRenameFileSystem() throws Exception {
     doRenameEncryptionZone(fsWrapper);
   }
 
-  @Test(timeout = 60000)
+  @Test
   public void testRenameFileContext() throws Exception {
     doRenameEncryptionZone(fcWrapper);
   }
@@ -712,7 +710,7 @@ public class TestEncryptionZones {
     return blocks.getFileEncryptionInfo();
   }
 
-  @Test(timeout = 120000)
+  @Test
   public void testReadWrite() throws Exception {
     final HdfsAdmin dfsAdmin =
         new HdfsAdmin(FileSystem.getDefaultUri(conf), conf);
@@ -731,14 +729,33 @@ public class TestEncryptionZones {
     // Roll the key of the encryption zone
     assertNumZones(1);
     String keyName = dfsAdmin.listEncryptionZones().next().getKeyName();
+    FileEncryptionInfo feInfo1 = getFileEncryptionInfo(encFile1);
     cluster.getNamesystem().getProvider().rollNewVersion(keyName);
+    /**
+     * due to the cache on the server side, client may get old keys.
+     * @see EagerKeyGeneratorKeyProviderCryptoExtension#rollNewVersion(String)
+     */
+    boolean rollSucceeded = false;
+    for (int i = 0; i <= EagerKeyGeneratorKeyProviderCryptoExtension
+        .KMS_KEY_CACHE_SIZE_DEFAULT + CommonConfigurationKeysPublic.
+        KMS_CLIENT_ENC_KEY_CACHE_SIZE_DEFAULT; ++i) {
+      KeyProviderCryptoExtension.EncryptedKeyVersion ekv2 =
+          cluster.getNamesystem().getProvider().generateEncryptedKey(TEST_KEY);
+      if (!(feInfo1.getEzKeyVersionName()
+          .equals(ekv2.getEncryptionKeyVersionName()))) {
+        rollSucceeded = true;
+        break;
+      }
+    }
+    Assert.assertTrue("rollover did not generate a new key even after"
+        + " queue is drained", rollSucceeded);
+
     // Read them back in and compare byte-by-byte
     verifyFilesEqual(fs, baseFile, encFile1, len);
     // Write a new enc file and validate
     final Path encFile2 = new Path(zone, "myfile2");
     DFSTestUtil.createFile(fs, encFile2, len, (short) 1, 0xFEED);
     // FEInfos should be different
-    FileEncryptionInfo feInfo1 = getFileEncryptionInfo(encFile1);
     FileEncryptionInfo feInfo2 = getFileEncryptionInfo(encFile2);
     assertFalse("EDEKs should be different", Arrays
         .equals(feInfo1.getEncryptedDataEncryptionKey(),
@@ -749,7 +766,7 @@ public class TestEncryptionZones {
     verifyFilesEqual(fs, encFile1, encFile2, len);
   }
 
-  @Test(timeout = 120000)
+  @Test
   public void testReadWriteUsingWebHdfs() throws Exception {
     final HdfsAdmin dfsAdmin =
         new HdfsAdmin(FileSystem.getDefaultUri(conf), conf);
@@ -798,7 +815,7 @@ public class TestEncryptionZones {
     out.close();
   }
 
-  @Test(timeout = 60000)
+  @Test
   public void testVersionAndSuiteNegotiation() throws Exception {
     final HdfsAdmin dfsAdmin =
         new HdfsAdmin(FileSystem.getDefaultUri(conf), conf);
@@ -843,9 +860,9 @@ public class TestEncryptionZones {
     // Check KeyProvider state
     // Flushing the KP on the NN, since it caches, and init a test one
     cluster.getNamesystem().getProvider().flush();
-    KeyProvider provider = KeyProviderFactory
-        .get(new URI(conf.getTrimmed(DFSConfigKeys.DFS_ENCRYPTION_KEY_PROVIDER_URI)),
-            conf);
+    KeyProvider provider = KeyProviderFactory.get(new URI(conf.getTrimmed(
+        CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH)),
+        conf);
     List<String> keys = provider.getKeys();
     assertEquals("Expected NN to have created one key per zone", 1,
         keys.size());
@@ -925,13 +942,13 @@ public class TestEncryptionZones {
     }
   }
 
-  @Test(timeout = 120000)
+  @Test
   public void testCreateEZWithNoProvider() throws Exception {
     // Unset the key provider and make sure EZ ops don't work
     final Configuration clusterConf = cluster.getConfiguration(0);
-    clusterConf.unset(DFSConfigKeys.DFS_ENCRYPTION_KEY_PROVIDER_URI);
+    clusterConf
+        .unset(CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH);
     cluster.restartNameNode(true);
-    cluster.waitActive();
     final Path zone1 = new Path("/zone1");
     fsWrapper.mkdir(zone1, FsPermission.getDirDefault(), true);
     try {
@@ -941,14 +958,15 @@ public class TestEncryptionZones {
       assertExceptionContains("since no key provider is available", e);
     }
     final Path jksPath = new Path(testRootDir.toString(), "test.jks");
-    clusterConf.set(DFSConfigKeys.DFS_ENCRYPTION_KEY_PROVIDER_URI,
-        JavaKeyStoreProvider.SCHEME_NAME + "://file" + jksPath.toUri()
+    clusterConf
+        .set(CommonConfigurationKeysPublic.HADOOP_SECURITY_KEY_PROVIDER_PATH,
+            JavaKeyStoreProvider.SCHEME_NAME + "://file" + jksPath.toUri()
     );
     // Try listing EZs as well
     assertNumZones(0);
   }
 
-  @Test(timeout = 120000)
+  @Test
   public void testIsEncryptedMethod() throws Exception {
     doTestIsEncryptedMethod(new Path("/"));
     doTestIsEncryptedMethod(new Path("/.reserved/raw"));
@@ -1036,7 +1054,7 @@ public class TestEncryptionZones {
   }
 
   private class MyInjector extends EncryptionFaultInjector {
-    int generateCount;
+    volatile int generateCount;
     CountDownLatch ready;
     CountDownLatch wait;
 
@@ -1046,13 +1064,27 @@ public class TestEncryptionZones {
     }
 
     @Override
-    public void startFileAfterGenerateKey() throws IOException {
+    public void startFileNoKey() throws IOException {
+      generateCount = -1;
+      syncWithLatches();
+    }
+
+    @Override
+    public void startFileBeforeGenerateKey() throws IOException {
+      syncWithLatches();
+    }
+
+    private void syncWithLatches() throws IOException {
       ready.countDown();
       try {
         wait.await();
       } catch (InterruptedException e) {
         throw new IOException(e);
       }
+    }
+
+    @Override
+    public void startFileAfterGenerateKey() throws IOException {
       generateCount++;
     }
   }
@@ -1088,10 +1120,14 @@ public class TestEncryptionZones {
       Future<Void> future =
           executor.submit(new CreateFileTask(fsWrapper, file));
       injector.ready.await();
-      // Do the fault
-      doFault();
-      // Allow create to proceed
-      injector.wait.countDown();
+      try {
+        // Do the fault
+        doFault();
+        // Allow create to proceed
+      } finally {
+        // Always decrement latch to avoid hanging the tests on failure.
+        injector.wait.countDown();
+      }
       future.get();
       // Cleanup and postconditions
       doCleanup();
@@ -1107,27 +1143,28 @@ public class TestEncryptionZones {
    * Tests the retry logic in startFile. We release the lock while generating
    * an EDEK, so tricky things can happen in the intervening time.
    */
-  @Test(timeout = 120000)
+  @Test
   public void testStartFileRetry() throws Exception {
     final Path zone1 = new Path("/zone1");
     final Path file = new Path(zone1, "file1");
     fsWrapper.mkdir(zone1, FsPermission.getDirDefault(), true);
     ExecutorService executor = Executors.newSingleThreadExecutor();
 
-    // Test when the parent directory becomes an EZ
+    // Test when the parent directory becomes an EZ.  With no initial EZ,
+    // the fsn lock must not be yielded.
     executor.submit(new InjectFaultTask() {
       @Override
-      public void doFault() throws Exception {
-        dfsAdmin.createEncryptionZone(zone1, TEST_KEY, NO_TRASH);
-      }
-      @Override
       public void doCleanup() throws Exception {
-        assertEquals("Expected a startFile retry", 2, injector.generateCount);
+        assertEquals("Expected no startFile key generation",
+            -1, injector.generateCount);
         fsWrapper.delete(file, false);
       }
     }).get();
 
-    // Test when the parent directory unbecomes an EZ
+    // Test when the parent directory unbecomes an EZ.  The generation of
+    // the EDEK will yield the lock, then re-resolve the path and use the
+    // previous EDEK.
+    dfsAdmin.createEncryptionZone(zone1, TEST_KEY, NO_TRASH);
     executor.submit(new InjectFaultTask() {
       @Override
       public void doFault() throws Exception {
@@ -1140,7 +1177,9 @@ public class TestEncryptionZones {
       }
     }).get();
 
-    // Test when the parent directory becomes a different EZ
+    // Test when the parent directory becomes a different EZ.  The generation
+    // of the EDEK will yield the lock, re-resolve will detect the EZ has
+    // changed, and client will be asked to retry a 2nd time
     fsWrapper.mkdir(zone1, FsPermission.getDirDefault(), true);
     final String otherKey = "other_key";
     DFSTestUtil.createKey(otherKey, cluster, conf);
@@ -1199,7 +1238,7 @@ public class TestEncryptionZones {
   /**
    * Tests obtaining delegation token from stored key
    */
-  @Test(timeout = 120000)
+  @Test
   public void testDelegationToken() throws Exception {
     UserGroupInformation.createRemoteUser("JobTracker");
     DistributedFileSystem dfs = cluster.getFileSystem();
@@ -1230,7 +1269,7 @@ public class TestEncryptionZones {
   /**
    * Test running fsck on a system with encryption zones.
    */
-  @Test(timeout = 60000)
+  @Test
   public void testFsckOnEncryptionZones() throws Exception {
     final int len = 8196;
     final Path zoneParent = new Path("/zones");
@@ -1261,7 +1300,7 @@ public class TestEncryptionZones {
    * Test correctness of successive snapshot creation and deletion
    * on a system with encryption zones.
    */
-  @Test(timeout = 60000)
+  @Test
   public void testSnapshotsOnEncryptionZones() throws Exception {
     final String TEST_KEY2 = "testkey2";
     DFSTestUtil.createKey(TEST_KEY2, cluster, conf);
@@ -1343,7 +1382,7 @@ public class TestEncryptionZones {
    * they function properly when the target is in the same
    * or different ez.
    */
-  @Test(timeout = 60000)
+  @Test
   public void testEncryptionZonesWithSymlinks() throws Exception {
     // Verify we can create an encryption zone over both link and target
     final int len = 8192;
@@ -1378,7 +1417,7 @@ public class TestEncryptionZones {
     fs.delete(target, true);
   }
 
-  @Test(timeout = 60000)
+  @Test
   public void testConcatFailsInEncryptionZones() throws Exception {
     final int len = 8192;
     final Path ez = new Path("/ez");
@@ -1403,7 +1442,7 @@ public class TestEncryptionZones {
   /**
    * Test running the OfflineImageViewer on a system with encryption zones.
    */
-  @Test(timeout = 60000)
+  @Test
   public void testOfflineImageViewerOnEncryptionZones() throws Exception {
     final int len = 8196;
     final Path zoneParent = new Path("/zones");
@@ -1434,7 +1473,7 @@ public class TestEncryptionZones {
   /**
    * Test creating encryption zone on the root path
    */
-  @Test(timeout = 60000)
+  @Test
   public void testEncryptionZonesOnRootPath() throws Exception {
     final int len = 8196;
     final Path rootDir = new Path("/");
@@ -1453,7 +1492,7 @@ public class TestEncryptionZones {
     DFSTestUtil.verifyFilesNotEqual(fs, zoneFile, rawFile, len);
   }
 
-  @Test(timeout = 60000)
+  @Test
   public void testEncryptionZonesOnRelativePath() throws Exception {
     final int len = 8196;
     final Path baseDir = new Path("/somewhere/base");
@@ -1471,29 +1510,22 @@ public class TestEncryptionZones {
         .getEncryptionZoneForPath(zoneDir).getPath().toString());
   }
 
-  @Test(timeout = 60000)
-  public void testGetEncryptionZoneOnANonExistentZoneFile() throws Exception {
-    final Path ez = new Path("/ez");
-    fs.mkdirs(ez);
-    dfsAdmin.createEncryptionZone(ez, TEST_KEY, NO_TRASH);
-    Path zoneFile = new Path(ez, "file");
-    try {
-      fs.getEZForPath(zoneFile);
-      fail("FileNotFoundException should be thrown for a non-existent"
-          + " file path");
-    } catch (FileNotFoundException e) {
-      assertExceptionContains("Path not found: " + zoneFile, e);
-    }
-    try {
-      dfsAdmin.getEncryptionZoneForPath(zoneFile);
-      fail("FileNotFoundException should be thrown for a non-existent"
-          + " file path");
-    } catch (FileNotFoundException e) {
-      assertExceptionContains("Path not found: " + zoneFile, e);
-    }
+  @Test
+  public void testGetEncryptionZoneOnANonExistentPaths() throws Exception {
+    final Path ezPath = new Path("/ez");
+    fs.mkdirs(ezPath);
+    dfsAdmin.createEncryptionZone(ezPath, TEST_KEY, NO_TRASH);
+    Path zoneFile = new Path(ezPath, "file");
+    EncryptionZone ez = fs.getEZForPath(zoneFile);
+    assertNotNull("Expected EZ for non-existent path in EZ", ez);
+    ez = dfsAdmin.getEncryptionZoneForPath(zoneFile);
+    assertNotNull("Expected EZ for non-existent path in EZ", ez);
+    ez = dfsAdmin.getEncryptionZoneForPath(
+        new Path("/does/not/exist"));
+    assertNull("Expected null for non-existent path not in EZ", ez);
   }
 
-  @Test(timeout = 120000)
+  @Test
   public void testEncryptionZoneWithTrash() throws Exception {
     // Create the encryption zone1
     final HdfsAdmin dfsAdmin =
@@ -1537,11 +1569,12 @@ public class TestEncryptionZones {
     verifyShellDeleteWithTrash(shell, topEZ);
   }
 
-  @Test(timeout = 120000)
+  @Test
   public void testRootDirEZTrash() throws Exception {
     final HdfsAdmin dfsAdmin =
         new HdfsAdmin(FileSystem.getDefaultUri(conf), conf);
-    dfsAdmin.createEncryptionZone(new Path("/"), TEST_KEY, NO_TRASH);
+    final Path rootDir = new Path("/");
+    dfsAdmin.createEncryptionZone(rootDir, TEST_KEY, NO_TRASH);
     final Path encFile = new Path("/encFile");
     final int len = 8192;
     DFSTestUtil.createFile(fs, encFile, len, (short) 1, 0xFEED);
@@ -1549,9 +1582,16 @@ public class TestEncryptionZones {
     clientConf.setLong(FS_TRASH_INTERVAL_KEY, 1);
     FsShell shell = new FsShell(clientConf);
     verifyShellDeleteWithTrash(shell, encFile);
+
+    // Trash path should be consistent
+    // if root path is an encryption zone
+    Path encFileTrash = shell.getCurrentTrashDir(encFile);
+    Path rootDirTrash = shell.getCurrentTrashDir(rootDir);
+    assertEquals("Root trash should be equal with ezFile trash",
+        encFileTrash, rootDirTrash);
   }
 
-  @Test(timeout = 120000)
+  @Test
   public void testGetTrashRoots() throws Exception {
     final HdfsAdmin dfsAdmin =
         new HdfsAdmin(FileSystem.getDefaultUri(conf), conf);

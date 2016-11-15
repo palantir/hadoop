@@ -440,7 +440,7 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
     synchronized StorageReport getStorageReport(String bpid) {
       return new StorageReport(dnStorage,
           false, getCapacity(), getUsed(), getFree(),
-          map.get(bpid).getUsed());
+          map.get(bpid).getUsed(), 0L);
     }
   }
   
@@ -1308,11 +1308,6 @@ public class SimulatedFSDataset implements FsDatasetSpi<FsVolumeSpi> {
 
   @Override
   public List<FinalizedReplica> getFinalizedBlocks(String bpid) {
-    throw new UnsupportedOperationException();
-  }
-
-  @Override
-  public List<FinalizedReplica> getFinalizedBlocksOnPersistentStorage(String bpid) {
     throw new UnsupportedOperationException();
   }
 

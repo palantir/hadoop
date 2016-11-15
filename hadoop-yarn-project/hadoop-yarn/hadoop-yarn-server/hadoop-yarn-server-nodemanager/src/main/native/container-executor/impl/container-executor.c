@@ -51,6 +51,9 @@ static const char* TC_MODIFY_STATE_OPTS [] = { "-b" , NULL};
 static const char* TC_READ_STATE_OPTS [] = { "-b", NULL};
 static const char* TC_READ_STATS_OPTS [] = { "-s",  "-b", NULL};
 
+static const int DEFAULT_DOCKER_SUPPORT_ENABLED = 0;
+static const int DEFAULT_TC_SUPPORT_ENABLED = 0;
+
 //struct to store the user details
 struct passwd *user_detail = NULL;
 
@@ -60,12 +63,29 @@ FILE* ERRORFILE = NULL;
 static uid_t nm_uid = -1;
 static gid_t nm_gid = -1;
 
+struct configuration executor_cfg = {.size=0, .confdetails=NULL};
+
 char *concatenate(char *concat_pattern, char *return_path_name,
    int numArgs, ...);
 
 void set_nm_uid(uid_t user, gid_t group) {
   nm_uid = user;
   nm_gid = group;
+}
+
+//function used to load the configurations present in the secure config
+void read_executor_config(const char* file_name) {
+    read_config(file_name, &executor_cfg);
+}
+
+//function used to free executor configuration data
+void free_executor_configurations() {
+    free_configurations(&executor_cfg);
+}
+
+//Lookup nodemanager group from container executor configuration.
+char *get_nodemanager_group() {
+    return get_value(NM_GROUP_KEY, &executor_cfg);
 }
 
 /**
@@ -535,15 +555,6 @@ int create_validate_dir(const char* npath, mode_t perm, const char* path,
       if (check_dir(npath, sb.st_mode, perm, finalComponent) == -1) {
         return -1;
       }
-    } else {
-      // Explicitly set permission after creating the directory in case
-      // umask has been set to a restrictive value, i.e., 0077.
-      if (chmod(npath, perm) != 0) {
-        int permInt = perm & (S_IRWXU | S_IRWXG | S_IRWXO);
-        fprintf(LOGFILE, "Can't chmod %s to the required permission %o - %s\n",
-                npath, permInt, strerror(errno));
-        return -1;
-      }
     }
   } else {
     if (check_dir(npath, sb.st_mode, perm, finalComponent) == -1) {
@@ -574,7 +585,7 @@ int check_dir(const char* npath, mode_t st_mode, mode_t desired, int finalCompon
  * Function to prepare the container directories.
  * It creates the container work and log directories.
  */
-int create_container_directories(const char* user, const char *app_id,
+static int create_container_directories(const char* user, const char *app_id, 
     const char *container_id, char* const* local_dir, char* const* log_dir, const char *work_dir) {
   // create dirs as 0750
   const mode_t perms = S_IRWXU | S_IRGRP | S_IXGRP;
@@ -668,7 +679,7 @@ static struct passwd* get_user_info(const char* user) {
 }
 
 int is_whitelisted(const char *user) {
-  char **whitelist = get_values(ALLOWED_SYSTEM_USERS_KEY);
+  char **whitelist = get_values(ALLOWED_SYSTEM_USERS_KEY, &executor_cfg);
   char **users = whitelist;
   if (whitelist != NULL) {
     for(; *users; ++users) {
@@ -696,7 +707,7 @@ struct passwd* check_user(const char *user) {
     fflush(LOGFILE);
     return NULL;
   }
-  char *min_uid_str = get_value(MIN_USERID_KEY);
+  char *min_uid_str = get_value(MIN_USERID_KEY, &executor_cfg);
   int min_uid = DEFAULT_MIN_USERID;
   if (min_uid_str != NULL) {
     char *end_ptr = NULL;
@@ -723,7 +734,7 @@ struct passwd* check_user(const char *user) {
     free(user_info);
     return NULL;
   }
-  char **banned_users = get_values(BANNED_USERS_KEY);
+  char **banned_users = get_values(BANNED_USERS_KEY, &executor_cfg);
   banned_users = banned_users == NULL ?
     (char**) DEFAULT_BANNED_USERS : banned_users;
   char **banned_user = banned_users;
@@ -956,6 +967,41 @@ int create_log_dirs(const char *app_id, char * const * log_dirs) {
 }
 
 
+static int is_feature_enabled(const char* feature_key, int default_value) {
+    char *enabled_str = get_value(feature_key, &executor_cfg);
+    int enabled = default_value;
+
+    if (enabled_str != NULL) {
+        char *end_ptr = NULL;
+        enabled = strtol(enabled_str, &end_ptr, 10);
+
+        if ((enabled_str == end_ptr || *end_ptr != '\0') ||
+            (enabled < 0 || enabled > 1)) {
+              fprintf(LOGFILE, "Illegal value '%s' for '%s' in configuration. "
+              "Using default value: %d.\n", enabled_str, feature_key,
+              default_value);
+              fflush(LOGFILE);
+              free(enabled_str);
+              return default_value;
+        }
+
+        free(enabled_str);
+        return enabled;
+    } else {
+        return default_value;
+    }
+}
+
+
+int is_docker_support_enabled() {
+    return is_feature_enabled(DOCKER_SUPPORT_ENABLED_KEY,
+    DEFAULT_DOCKER_SUPPORT_ENABLED);
+}
+
+int is_tc_support_enabled() {
+    return is_feature_enabled(TC_SUPPORT_ENABLED_KEY,
+    DEFAULT_TC_SUPPORT_ENABLED);
+}
 /**
  * Function to prepare the application directories for the container.
  */
@@ -1072,13 +1118,10 @@ char* parse_docker_command_file(const char* command_file) {
 
 int run_docker(const char *command_file) {
   char* docker_command = parse_docker_command_file(command_file);
-  char* docker_binary = get_value(DOCKER_BINARY_KEY);
+  char* docker_binary = get_value(DOCKER_BINARY_KEY, &executor_cfg);
   char* docker_command_with_binary = calloc(sizeof(char), EXECUTOR_PATH_MAX);
   snprintf(docker_command_with_binary, EXECUTOR_PATH_MAX, "%s %s", docker_binary, docker_command);
   char **args = extract_values_delim(docker_command_with_binary, " ");
-
-  //clean up command file before we exec
-  unlink(command_file);
 
   int exit_code = -1;
   if (execvp(docker_binary, args) != 0) {
@@ -1234,7 +1277,7 @@ int launch_docker_container_as_user(const char * user, const char *app_id,
   char buffer[BUFFER_SIZE];
 
   char *docker_command = parse_docker_command_file(command_file);
-  char *docker_binary = get_value(DOCKER_BINARY_KEY);
+  char *docker_binary = get_value(DOCKER_BINARY_KEY, &executor_cfg);
   if (docker_binary == NULL) {
     docker_binary = "docker";
   }
@@ -1390,8 +1433,6 @@ int launch_docker_container_as_user(const char * user, const char *app_id,
   }
 
 cleanup:
-  //clean up docker command file
-  unlink(command_file);
 
   if (exit_code_file != NULL && write_exit_code_file(exit_code_file, exit_code) < 0) {
     fprintf (ERRORFILE,
@@ -1861,7 +1902,6 @@ static int run_traffic_control(const char *opts[], char *command_file) {
       fprintf(LOGFILE, "failed to execute tc command!\n");
       return TRAFFIC_CONTROL_EXECUTION_FAILED;
     }
-    unlink(command_file);
     return 0;
   } else {
     execv(TC_BIN, (char**)args);
