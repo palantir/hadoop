@@ -84,6 +84,8 @@ import org.apache.hadoop.yarn.api.protocolrecords.ReservationUpdateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.SubmitApplicationRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationPriorityRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationTimeoutsRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.UpdateApplicationTimeoutsResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptReport;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -167,11 +169,24 @@ public class YarnClientImpl extends YarnClient {
 
     if (conf.getBoolean(YarnConfiguration.TIMELINE_SERVICE_ENABLED,
         YarnConfiguration.DEFAULT_TIMELINE_SERVICE_ENABLED)) {
-      timelineServiceEnabled = true;
-      timelineClient = createTimelineClient();
-      timelineClient.init(conf);
-      timelineDTRenewer = getTimelineDelegationTokenRenewer(conf);
-      timelineService = TimelineUtils.buildTimelineTokenService(conf);
+      try {
+        timelineServiceEnabled = true;
+        timelineClient = createTimelineClient();
+        timelineClient.init(conf);
+        timelineDTRenewer = getTimelineDelegationTokenRenewer(conf);
+        timelineService = TimelineUtils.buildTimelineTokenService(conf);
+      } catch (NoClassDefFoundError error) {
+        // When attempt to initiate the timeline client with
+        // different set of dependencies, it may fail with
+        // NoClassDefFoundError. When some of them are not compatible
+        // with timeline server. This is not necessarily a fatal error
+        // to the client.
+        LOG.warn("Timeline client could not be initialized "
+            + "because dependency missing or incompatible,"
+            + " disabling timeline client.",
+            error);
+        timelineServiceEnabled = false;
+      }
     }
 
     // The AHSClientService is enabled by default when we start the
@@ -544,6 +559,13 @@ public class YarnClientImpl extends YarnClient {
   }
 
   @Override
+  public List<ApplicationReport> getApplications(
+      GetApplicationsRequest request) throws YarnException, IOException {
+    GetApplicationsResponse response = rmClient.getApplications(request);
+    return response.getApplicationList();
+  }
+
+  @Override
   public YarnClusterMetrics getYarnClusterMetrics() throws YarnException,
       IOException {
     GetClusterMetricsRequest request =
@@ -896,5 +918,12 @@ public class YarnClientImpl extends YarnClient {
     SignalContainerRequest request =
         SignalContainerRequest.newInstance(containerId, command);
     rmClient.signalToContainer(request);
+  }
+
+  @Override
+  public UpdateApplicationTimeoutsResponse updateApplicationTimeouts(
+      UpdateApplicationTimeoutsRequest request)
+      throws YarnException, IOException {
+    return rmClient.updateApplicationTimeouts(request);
   }
 }

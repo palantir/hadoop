@@ -298,6 +298,8 @@ The answer to "What is your first and last name?" (i.e. "CN") must be the hostna
 
 NOTE: You need to restart the KMS for the configuration changes to take effect.
 
+NOTE: Some old SSL clients may use weak ciphers that are not supported by the KMS server. It is recommended to upgrade the SSL client.
+
 $H4 ACLs (Access Control Lists)
 
 KMS supports ACLs (Access Control Lists) for fine-grained permission control.
@@ -737,9 +739,9 @@ This secret sharing can be done using a Zookeeper service which is configured in
   </property>
   <property>
     <name>hadoop.kms.authentication.signer.secret.provider.zookeeper.auth.type</name>
-    <value>kerberos</value>
+    <value>sasl</value>
     <description>
-      The Zookeeper authentication type, 'none' or 'sasl' (Kerberos).
+      The Zookeeper authentication type, 'none' (default) or 'sasl' (Kerberos).
     </description>
   </property>
   <property>

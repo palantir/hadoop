@@ -50,6 +50,7 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.UpdateContainerRequest;
+import org.apache.hadoop.yarn.api.records.AbstractResourceRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.InvalidResourceRequestException;
 import org.apache.hadoop.yarn.exceptions.YarnException;
@@ -776,10 +777,12 @@ public abstract class AbstractYarnScheduler
   }
 
   @Override
-  public void updateApplicationPriority(Priority newPriority,
-      ApplicationId applicationId) throws YarnException {
+  public Priority updateApplicationPriority(Priority newPriority,
+      ApplicationId applicationId, SettableFuture<Object> future)
+      throws YarnException {
     // Dummy Implementation till Application Priority changes are done in
     // specific scheduler.
+    return Priority.newInstance(0);
   }
 
   @Override
@@ -1019,4 +1022,23 @@ public abstract class AbstractYarnScheduler
     }
   }
 
+  @Override
+  public void normalizeRequest(AbstractResourceRequest ask) {
+    SchedulerUtils.normalizeRequest(ask,
+        getResourceCalculator(),
+        getMinimumResourceCapability(),
+        getMaximumResourceCapability(),
+        getMinimumResourceCapability());
+  }
+
+  /**
+   * Normalize a list of resource requests.
+   *
+   * @param asks resource requests
+   */
+  protected void normalizeRequests(List<ResourceRequest> asks) {
+    for (ResourceRequest ask: asks) {
+      normalizeRequest(ask);
+    }
+  }
 }
