@@ -35,6 +35,7 @@ test:
 
           make_dist() {
             mvn package -Pdist,native -DskipTests -Dtar
+            file_name="hadoop-${version}"
             curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/hadoop/${version}/org/apache/hadoop/dist/${version}"
           }
 
