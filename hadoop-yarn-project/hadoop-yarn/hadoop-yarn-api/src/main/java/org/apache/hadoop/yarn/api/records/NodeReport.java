@@ -18,14 +18,14 @@
 
 package org.apache.hadoop.yarn.api.records;
 
-import java.util.Set;
-
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceAudience.Public;
 import org.apache.hadoop.classification.InterfaceStability.Stable;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.util.Records;
+
+import java.util.Set;
 
 /**
  * {@code NodeReport} is a summary of runtime information of a node
@@ -203,12 +203,18 @@ public abstract class NodeReport {
    */
   @Public
   @Stable
-  public abstract ResourceUtilization getAggregatedContainersUtilization();
+  public ResourceUtilization getAggregatedContainersUtilization() {
+        throw new UnsupportedOperationException(
+                    "subclass must implement this method");
+      }
 
   @Private
   @Unstable
-  public abstract void setAggregatedContainersUtilization(ResourceUtilization
-      containersUtilization);
+  public void setAggregatedContainersUtilization(ResourceUtilization
+      containersUtilization) {
+        throw new UnsupportedOperationException(
+                    "subclass must implement this method");
+      }
 
   /**
    * Get node resource utilization
@@ -216,9 +222,15 @@ public abstract class NodeReport {
    */
   @Public
   @Stable
-  public abstract ResourceUtilization getNodeUtilization();
+  public ResourceUtilization getNodeUtilization() {
+        throw new UnsupportedOperationException(
+                    "subclass must implement this method");
+      }
 
   @Private
   @Unstable
-  public abstract void setNodeUtilization(ResourceUtilization nodeUtilization);
+  public void setNodeUtilization(ResourceUtilization nodeUtilization) {
+        throw new UnsupportedOperationException(
+                    "subclass must implement this method");
+      }
 }
