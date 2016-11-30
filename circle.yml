@@ -33,9 +33,15 @@ test:
             mvn -e --settings $tmp_settings -DskipTests deploy
           }
 
+          make_dist() {
+            mvn package -Pdist,native -DskipTests -Dtar
+            curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T $file_name "https://api.bintray.com/content/palantir/releases/hadoop/${version}/org/apache/hadoop/dist/${version}"
+          }
+
           case $CIRCLE_NODE_INDEX in
           0)
             publish_artifacts
+            make_dist
             ;;
           esac
       :
