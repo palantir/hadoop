@@ -40,8 +40,8 @@ test:
 
           case $CIRCLE_NODE_INDEX in
           0)
+	    make_dist
             publish_artifacts
-            make_dist
             ;;
           esac
       :
