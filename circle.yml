@@ -41,8 +41,10 @@ test:
           case $CIRCLE_NODE_INDEX in
           0)
 	    make_dist
-            publish_artifacts
             ;;
+	  1)
+            publish_artifacts
+	    ;;
           esac
       :
         parallel: true
