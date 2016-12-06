@@ -994,6 +994,13 @@ public class LeafQueue extends AbstractCSQueue {
             node.getPartition(), reservedOrAllocatedRMContainer,
             assignment.isIncreasedAllocation());
 
+        // Update reserved metrics
+        Resource reservedRes = assignment.getAssignmentInformation()
+            .getReserved();
+        if (reservedRes != null && !reservedRes.equals(Resources.none())) {
+          incReservedResource(node.getPartition(), reservedRes);
+        }
+
         // Done
         return assignment;
       } else if (assignment.getSkippedType()
@@ -1433,7 +1440,7 @@ public class LeafQueue extends AbstractCSQueue {
 
         // Book-keeping
         if (removed) {
-          
+
           // Inform the ordering policy
           orderingPolicy.containerReleased(application, rmContainer);
           
