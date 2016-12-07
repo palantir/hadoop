@@ -204,17 +204,17 @@ public abstract class NodeReport {
   @Public
   @Stable
   public ResourceUtilization getAggregatedContainersUtilization() {
-        throw new UnsupportedOperationException(
-                    "subclass must implement this method");
-      }
+    throw new UnsupportedOperationException(
+        "subclass must implement this method");
+  }
 
   @Private
   @Unstable
   public void setAggregatedContainersUtilization(ResourceUtilization
       containersUtilization) {
-        throw new UnsupportedOperationException(
-                    "subclass must implement this method");
-      }
+    throw new UnsupportedOperationException(
+        "subclass must implement this method");
+  }
 
   /**
    * Get node resource utilization
@@ -223,14 +223,26 @@ public abstract class NodeReport {
   @Public
   @Stable
   public ResourceUtilization getNodeUtilization() {
+<<<<<<< HEAD
         throw new UnsupportedOperationException(
                     "subclass must implement this method");
       }
+=======
+    throw new UnsupportedOperationException(
+        "subclass must implement this method");
+  }
+>>>>>>> apache/branch-2.8
 
   @Private
   @Unstable
   public void setNodeUtilization(ResourceUtilization nodeUtilization) {
+<<<<<<< HEAD
         throw new UnsupportedOperationException(
                     "subclass must implement this method");
       }
+=======
+    throw new UnsupportedOperationException(
+        "subclass must implement this method");
+  }
+>>>>>>> apache/branch-2.8
 }

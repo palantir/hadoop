@@ -123,14 +123,14 @@ public abstract class ContainerStatus {
   @Public
   @Unstable
   public Resource getCapability() {
-        throw new UnsupportedOperationException(
-                    "subclass must implement this method");
-      }
+    throw new UnsupportedOperationException(
+        "subclass must implement this method");
+  }
 
   @Private
   @Unstable
   public void setCapability(Resource capability) {
-        throw new UnsupportedOperationException(
-                    "subclass must implement this method");
-      }
+    throw new UnsupportedOperationException(
+        "subclass must implement this method");
+  }
 }
