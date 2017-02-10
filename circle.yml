@@ -14,7 +14,7 @@ checkout:
 
 dependencies:
   override:
-    - mvn install -DskipTests
+    - mvn install
 
 test:
   override:
