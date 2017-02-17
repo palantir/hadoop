@@ -1,0 +1,85 @@
+machine:
+  java:
+    version: oraclejdk8
+  environment:
+    TERM: dumb
+
+checkout:
+  post:
+    - "[[ ! -s \"$(git rev-parse --git-dir)/shallow\" ]] || git fetch --unshallow"
+    - echo "user=$BINTRAY_USERNAME" > .credentials
+    - echo "password=$BINTRAY_PASSWORD" >> .credentials
+    - echo "realm=Bintray API Realm" >> .credentials
+    - echo "host=api.bintray.com" >> .credentials
+
+dependencies:
+  override:
+    - ? |
+          case $CIRCLE_NODE_INDEX in
+          0)
+            mvn -T 1C test --fail-never -pl hadoop-client -am | grep -v "ignoring option MaxPermSize"
+            ;;
+          1)
+            cd hadoop-common-project && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
+            ;;
+          2)
+            cd hadoop-hdfs-project && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
+            ;;
+          3)
+            mvn -T 1C test --fail-never -pl hadoop-mapreduce-project -am | grep -v "ignoring option MaxPermSize"
+            ;;
+          4)
+            cd hadoop-tools && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
+            ;;
+          5)
+            mvn -T 1C test --fail-never -pl hadoop-yarn-project -am | grep -v "ignoring option MaxPermSize"
+            ;;
+          esac
+      :
+        max-runtime: 57600
+        parallel: true
+
+test:
+  override:
+    - ? |
+          set -euo pipefail
+          version=$(git describe --tags --always)
+
+          publish_artifacts() {
+            tmp_settings="tmp-settings.xml"
+            echo "<settings><servers><server>" > $tmp_settings
+            echo "<id>bintray-palantir-release</id><username>$BINTRAY_USERNAME</username>" >> $tmp_settings
+            echo "<password>$BINTRAY_PASSWORD</password>" >> $tmp_settings
+            echo "</server></servers></settings>" >> $tmp_settings
+
+            mvn -e versions:set -DnewVersion=$version
+            mvn -e install -DskipTests -Dmaven.javadoc.skip=true
+            mvn -e --settings $tmp_settings -DskipTests deploy
+          }
+
+          make_dist() {
+            mvn package -Pdist -DskipTests -Dmaven.javadoc.skip=true -Dtar
+            curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T hadoop-dist/target/hadoop-2.8.0.tar.gz "https://api.bintray.com/content/palantir/releases/hadoop/${version}/org/apache/hadoop/dist/${version}"
+          }
+
+          case $CIRCLE_NODE_INDEX in
+          0)
+            publish_artifacts
+            ;;
+          1)
+            make_dist
+            ;;
+          esac
+      :
+        parallel: true
+        timeout: 1200
+
+deployment:
+  release:
+    tag: /2.8.0-palantir[0-9]+/
+    commands:
+      - curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/hadoop/$(git describe --tags)/publish
+  rc:
+    tag: /2.8.0-palantir[0-9]+-rc[0-9]+/
+    commands:
+      - curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -X POST https://api.bintray.com/content/palantir/releases/hadoop/$(git describe --tags)/publish
