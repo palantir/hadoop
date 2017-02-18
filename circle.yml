@@ -38,6 +38,7 @@ dependencies:
       :
         max-runtime: 57600
         parallel: true
+        timeout: 1200
 
 test:
   override:
