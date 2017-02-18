@@ -17,21 +17,18 @@ dependencies:
     - ? |
           case $CIRCLE_NODE_INDEX in
           0)
-            mvn -T 1C test --fail-never -pl hadoop-client -am | grep -v "ignoring option MaxPermSize"
-            ;;
-          1)
             cd hadoop-common-project && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
             ;;
-          2)
+          1)
             cd hadoop-hdfs-project && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
             ;;
-          3)
+          2)
             mvn -T 1C test --fail-never -pl hadoop-mapreduce-project -am | grep -v "ignoring option MaxPermSize"
             ;;
-          4)
+          3)
             cd hadoop-tools && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
             ;;
-          5)
+          4)
             mvn -T 1C test --fail-never -pl hadoop-yarn-project -am | grep -v "ignoring option MaxPermSize"
             ;;
           esac
