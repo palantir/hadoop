@@ -17,27 +17,25 @@ dependencies:
     - ? |
           case $CIRCLE_NODE_INDEX in
           0)
-            mvn -T 1C test --fail-never -pl hadoop-client -am | grep -v "ignoring option MaxPermSize"
+            cd hadoop-common-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           1)
-            cd hadoop-common-project && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
+            cd hadoop-hdfs-project && mvn -T 1C test --fail-never -pl '!hadoop-hdfs/src/contrib/bkjournal' | grep -v "ignoring option MaxPermSize"
             ;;
           2)
-            cd hadoop-hdfs-project && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
+            cd hadoop-mapreduce-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           3)
-            mvn -T 1C test --fail-never -pl hadoop-mapreduce-project -am | grep -v "ignoring option MaxPermSize"
+            cd hadoop-tools && mvn -T 1C test --fail-never -pl '!hadoop-azure','!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
             ;;
           4)
-            cd hadoop-tools && mvn -T 1C test --fail-never -am | grep -v "ignoring option MaxPermSize"
-            ;;
-          5)
-            mvn -T 1C test --fail-never -pl hadoop-yarn-project -am | grep -v "ignoring option MaxPermSize"
+            cd hadoop-yarn-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           esac
       :
         max-runtime: 57600
         parallel: true
+        timeout: 1200
 
 test:
   override:
