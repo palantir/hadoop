@@ -1767,7 +1767,7 @@ public class Client implements AutoCloseable {
     }
 
     void setSaslClient(SaslRpcClient client) throws IOException {
-      setInputStream(new BufferedInputStream(client.getInputStream(in)));
+      setInputStream(client.getInputStream(in));
       setOutputStream(client.getOutputStream(out));
     }
 
