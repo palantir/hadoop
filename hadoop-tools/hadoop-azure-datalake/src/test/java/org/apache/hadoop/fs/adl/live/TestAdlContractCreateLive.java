@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -14,21 +14,22 @@
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
+ *
  */
-package org.apache.hadoop.hdfs.server.datanode.web.dtp;
 
-import org.apache.hadoop.classification.InterfaceAudience;
+package org.apache.hadoop.fs.adl.live;
 
-import io.netty.handler.codec.http2.Http2ConnectionHandler;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.contract.AbstractContractCreateTest;
+import org.apache.hadoop.fs.contract.AbstractFSContract;
 
 /**
- * The HTTP/2 handler.
+ * Test creating files, overwrite options.
  */
-@InterfaceAudience.Private
-public class DtpHttp2Handler extends Http2ConnectionHandler {
+public class TestAdlContractCreateLive extends AbstractContractCreateTest {
 
-  public DtpHttp2Handler() {
-    super(true, new DtpHttp2FrameListener());
-    ((DtpHttp2FrameListener) decoder().listener()).encoder(encoder());
+  @Override
+  protected AbstractFSContract createContract(Configuration configuration) {
+    return new AdlStorageContract(configuration);
   }
 }
