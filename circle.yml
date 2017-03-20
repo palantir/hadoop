@@ -42,7 +42,7 @@ test:
     - ? |
           set -euo pipefail
           version=$(git describe --tags --always)
-          file_name="hadoop-${version}.tgz"
+          file_name="hadoop-dist-${version}.tgz"
 
           publish_artifacts() {
             tmp_settings="tmp-settings.xml"
