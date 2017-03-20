@@ -26,6 +26,7 @@ dependencies:
             cd hadoop-mapreduce-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           3)
+            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true
             cd hadoop-tools && mvn -T 1C test --fail-never -pl '!hadoop-azure','!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
             ;;
           4)
