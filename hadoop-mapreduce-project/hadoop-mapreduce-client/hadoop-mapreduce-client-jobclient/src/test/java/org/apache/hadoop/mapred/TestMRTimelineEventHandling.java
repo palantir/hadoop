@@ -31,8 +31,8 @@ import org.apache.hadoop.yarn.api.records.timeline.TimelineEntity;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.MiniYARNCluster;
 import org.apache.hadoop.yarn.server.timeline.TimelineStore;
-
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestMRTimelineEventHandling {
@@ -140,6 +140,7 @@ public class TestMRTimelineEventHandling {
     }
   }
 
+  @Ignore //palantir-hadoop
   @Test
   public void testMapreduceJobTimelineServiceEnabled()
       throws Exception {
