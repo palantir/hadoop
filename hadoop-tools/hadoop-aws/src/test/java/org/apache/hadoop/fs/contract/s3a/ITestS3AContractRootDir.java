@@ -18,15 +18,14 @@
 
 package org.apache.hadoop.fs.contract.s3a;
 
-import java.io.FileNotFoundException;
-import java.io.IOException;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractRootDirectoryTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
-
+import org.junit.Ignore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.*;
 
 /**
  * root dir operations against an S3 bucket.
@@ -68,5 +67,11 @@ public class ITestS3AContractRootDir extends
         }
       }
     }
+  }
+
+  @Ignore // palantir-hadoop
+  @Override
+  public void testRmEmptyRootDirNonRecursive() throws Throwable {
+    // Ignore this test until HADOOP-13713 is fixed.
   }
 }

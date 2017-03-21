@@ -21,6 +21,7 @@ package org.apache.hadoop.fs.contract.s3a;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractCreateTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
+import org.junit.Ignore;
 
 /**
  * S3A contract tests creating files.
@@ -30,5 +31,17 @@ public class ITestS3AContractCreate extends AbstractContractCreateTest {
   @Override
   protected AbstractFSContract createContract(Configuration conf) {
     return new S3AContract(conf);
+  }
+
+  @Ignore // palantir-hadoop
+  @Override
+  public void testOverwriteEmptyDirectory() throws Throwable {
+    // Ignore this due to having reverted HADOOP-13188.
+  }
+
+  @Ignore // palantir-hadoop
+  @Override
+  public void testOverwriteNonEmptyDirectory() throws Throwable {
+    // Ignore this due to having reverted HADOOP-13188.
   }
 }

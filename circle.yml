@@ -17,23 +17,23 @@ dependencies:
     - ? |
           case $CIRCLE_NODE_INDEX in
           0)
-            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true
+            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB"
             cd hadoop-common-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           1)
-            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true
+            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB"
             cd hadoop-hdfs-project && mvn -T 1C test --fail-never -pl '!hadoop-hdfs/src/contrib/bkjournal' | grep -v "ignoring option MaxPermSize"
             ;;
           2)
-            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true
+            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB"
             cd hadoop-mapreduce-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           3)
-            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true
+            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB"
             cd hadoop-tools && mvn -T 1C test --fail-never -pl '!hadoop-azure','!hadoop-azure-datalake','!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
             ;;
           4)
-            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true
+            mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB"
             cd hadoop-yarn-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           esac
