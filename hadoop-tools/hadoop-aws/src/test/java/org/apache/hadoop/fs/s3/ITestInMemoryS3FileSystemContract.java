@@ -18,11 +18,15 @@
 
 package org.apache.hadoop.fs.s3;
 
-import java.io.IOException;
+import org.junit.Ignore;
+
+import java.io.*;
 
 /**
  * S3 basic contract tests through mock in-memory S3 implementation.
  */
+
+@Ignore // palantir-hadoop
 @Deprecated
 public class ITestInMemoryS3FileSystemContract
     extends S3FileSystemContractBaseTest {
