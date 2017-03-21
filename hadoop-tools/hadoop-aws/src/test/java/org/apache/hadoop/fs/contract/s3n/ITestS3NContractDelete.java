@@ -21,10 +21,13 @@ package org.apache.hadoop.fs.contract.s3n;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractDeleteTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
+import org.junit.Ignore;
 
 /**
  * S3A contract tests covering deletes.
  */
+
+@Ignore // palantir-hadoop
 public class ITestS3NContractDelete extends AbstractContractDeleteTest {
 
   @Override

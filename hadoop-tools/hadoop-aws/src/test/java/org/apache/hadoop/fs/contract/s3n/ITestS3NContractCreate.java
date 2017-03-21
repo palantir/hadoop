@@ -22,10 +22,13 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractCreateTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
 import org.apache.hadoop.fs.contract.ContractTestUtils;
+import org.junit.Ignore;
 
 /**
  * S3N contract tests creating files.
  */
+
+@Ignore // palantir-hadoop
 public class ITestS3NContractCreate extends AbstractContractCreateTest {
 
   @Override

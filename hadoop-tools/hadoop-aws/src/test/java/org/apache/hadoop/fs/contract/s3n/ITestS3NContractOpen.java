@@ -21,10 +21,13 @@ package org.apache.hadoop.fs.contract.s3n;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractOpenTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
+import org.junit.Ignore;
 
 /**
  * S3N contract tests opening files.
  */
+
+@Ignore // palantir-hadoop
 public class ITestS3NContractOpen extends AbstractContractOpenTest {
 
   @Override
