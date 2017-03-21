@@ -18,18 +18,18 @@
 
 package org.apache.hadoop.fs.s3native;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URI;
-
-import junit.framework.TestCase;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.Path;
+import org.junit.Ignore;
 
+import java.io.*;
+import java.net.*;
+
+import junit.framework.TestCase;
+
+@Ignore // palantir-hadoop
 public class TestS3NInMemoryFileSystem extends TestCase {
 
   private static final String TEST_PATH = "s3n://test/data.txt";

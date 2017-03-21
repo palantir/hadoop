@@ -21,10 +21,13 @@ package org.apache.hadoop.fs.contract.s3n;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.contract.AbstractContractRootDirectoryTest;
 import org.apache.hadoop.fs.contract.AbstractFSContract;
+import org.junit.Ignore;
 
 /**
  * Root dir operations against an S3 bucket.
  */
+
+@Ignore // palantir-hadoop
 public class ITestS3NContractRootDir extends
     AbstractContractRootDirectoryTest {
 

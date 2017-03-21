@@ -36,3 +36,4 @@ In other words, this is based off of the actual Apache Hadoop 2.8.0 release.
   It is also fixed on branch-2.8.0 upstream, but in a way that conflicts with HADOOP-13075.
   The branch-2 patch does not conflict.
 * Revert [HADOOP-13188](https://issues.apache.org/jira/browse/HADOOP-13188)
+* Ignore tests for the s3n filesystem
