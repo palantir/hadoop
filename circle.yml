@@ -62,7 +62,7 @@ test:
           }
 
           make_dist() {
-            mvn package -Pdist -DskipTests -Dmaven.javadoc.skip=true -Dtar
+            mvn package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
             curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T hadoop-dist/target/hadoop-2.8.0.tar.gz "https://api.bintray.com/content/palantir/releases/hadoop/${version}/org/apache/hadoop/hadoop-dist/${version}/${file_name}"
           }
 
