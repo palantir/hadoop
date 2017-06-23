@@ -1,3 +1,7 @@
+# Downloads
+
+Available at [bintray](https://bintray.com/palantir/releases/hadoop/_latestVersion)
+
 # 2.8.0-palantir1
 
 Based on branch-2.8.0, commit e53c4a6d69fdfcdc41afa38e51f1d9a06fb10f2a.
