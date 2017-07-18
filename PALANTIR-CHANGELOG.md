@@ -105,6 +105,11 @@ In other words, this is based off of the actual Apache Hadoop 2.8.0 release.
 
 # 2.8.0-palantir.7
 
+The new version scheme caused the build to not happen. The changes in this version were released
+as 2.8.0-palantir.8 instead.
+
+# 2.8.0-palantir.8
+
 Based on branch-2.8.0, tag release-2.8.0-RC3 (commit 91f2b7a13d1e97be65db92ddabc627cc29ac0009).
 In other words, this is based off of the actual Apache Hadoop 2.8.0 release. Notably, it also
 contains the security fixes from Apache Hadoop 2.8.1.
