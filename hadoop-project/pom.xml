@@ -75,8 +75,8 @@
     <protobuf.version>2.5.0</protobuf.version>
     <protoc.path>${env.HADOOP_PROTOC_PATH}</protoc.path>
 
-    <zookeeper.version>3.4.6</zookeeper.version>
-    <curator.version>2.7.1</curator.version>
+    <zookeeper.version>3.4.9</zookeeper.version>
+    <curator.version>2.12.0</curator.version>
     <findbugs.version>3.0.0</findbugs.version>
 
     <tomcat.version>6.0.48</tomcat.version>
@@ -86,7 +86,7 @@
     <apacheds.version>2.0.0-M15</apacheds.version>
 
     <!-- define the Java language version used by the compiler -->
-    <javac.version>1.7</javac.version>
+    <javac.version>1.8</javac.version>
 
     <!-- The java version enforced by the maven enforcer -->
     <!-- more complex patterns can be used here, such as
@@ -434,7 +434,7 @@
       <dependency>
         <groupId>com.google.guava</groupId>
         <artifactId>guava</artifactId>
-        <version>11.0.2</version>
+        <version>21.0</version>
       </dependency>
       <dependency>
         <groupId>com.google.code.gson</groupId>

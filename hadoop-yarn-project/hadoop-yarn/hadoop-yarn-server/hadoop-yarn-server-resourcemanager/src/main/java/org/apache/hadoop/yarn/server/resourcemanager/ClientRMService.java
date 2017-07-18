@@ -1179,7 +1179,7 @@ public class ClientRMService extends AbstractService implements
         new RMAppMoveEvent(applicationId, request.getTargetQueue(), future));
     
     try {
-      Futures.get(future, YarnException.class);
+      Futures.getChecked(future, YarnException.class);
     } catch (YarnException ex) {
       RMAuditLogger.logFailure(callerUGI.getShortUserName(),
           AuditConstants.MOVE_APP_REQUEST, "UNKNOWN", "ClientRMService",
