@@ -27,7 +27,7 @@ import org.junit.Ignore;
  * S3N contract tests covering file seek.
  */
 
-@Ignore // palantir-hadoop
+@Ignore //palantir-hadoop
 public class ITestS3NContractSeek extends AbstractContractSeekTest {
 
   @Override

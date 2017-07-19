@@ -83,6 +83,7 @@ public class TestMRTimelineEventHandling {
     }
   }
 
+  @Ignore //palantir-hadoop
   @Test
   public void testMRTimelineEventHandling() throws Exception {
     Configuration conf = new YarnConfiguration();

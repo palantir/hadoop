@@ -29,7 +29,7 @@ import java.net.*;
 
 import junit.framework.TestCase;
 
-@Ignore // palantir-hadoop
+@Ignore //palantir-hadoop
 public class TestS3NInMemoryFileSystem extends TestCase {
 
   private static final String TEST_PATH = "s3n://test/data.txt";

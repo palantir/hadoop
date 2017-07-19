@@ -23,7 +23,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterResponse;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
@@ -58,6 +57,7 @@ import org.apache.hadoop.yarn.util.ControlledClock;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.hadoop.yarn.util.SystemClock;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestAMRestart {
@@ -744,6 +744,7 @@ public class TestAMRestart {
     return false;
   }
 
+  @Ignore //palantir-hadoop
   @Test(timeout = 30000)
   public void testAMRestartNotLostContainerCompleteMsg() throws Exception {
     YarnConfiguration conf = new YarnConfiguration();

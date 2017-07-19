@@ -27,7 +27,7 @@ import org.junit.Ignore;
  * S3A contract tests covering deletes.
  */
 
-@Ignore // palantir-hadoop
+@Ignore //palantir-hadoop
 public class ITestS3NContractDelete extends AbstractContractDeleteTest {
 
   @Override

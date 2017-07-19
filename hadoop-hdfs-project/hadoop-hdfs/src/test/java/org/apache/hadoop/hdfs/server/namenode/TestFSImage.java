@@ -60,7 +60,7 @@ public class TestFSImage {
     testPersistHelper(conf);
   }
 
-  @Ignore
+  @Ignore //palantir-hadoop
   @Test
   public void testCompression() throws IOException {
     Configuration conf = new Configuration();

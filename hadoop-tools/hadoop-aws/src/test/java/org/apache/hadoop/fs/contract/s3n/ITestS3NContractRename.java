@@ -27,7 +27,7 @@ import org.junit.Ignore;
  * S3N contract tests covering rename.
  */
 
-@Ignore // palantir-hadoop
+@Ignore //palantir-hadoop
 public class ITestS3NContractRename extends AbstractContractRenameTest {
 
   @Override

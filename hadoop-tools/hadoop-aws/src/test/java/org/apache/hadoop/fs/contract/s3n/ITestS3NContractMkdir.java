@@ -27,7 +27,7 @@ import org.junit.Ignore;
  * Test dir operations on S3.
  */
 
-@Ignore // palantir-hadoop
+@Ignore //palantir-hadoop
 public class ITestS3NContractMkdir extends AbstractContractMkdirTest {
 
   @Override

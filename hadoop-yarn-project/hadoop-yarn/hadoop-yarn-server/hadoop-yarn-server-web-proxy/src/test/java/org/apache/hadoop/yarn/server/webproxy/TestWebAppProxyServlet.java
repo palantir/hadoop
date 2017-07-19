@@ -219,7 +219,7 @@ public class TestWebAppProxyServlet {
     }
   }
 
-  @Ignore // palantir-hadoop
+  @Ignore //palantir-hadoop
   @Test(timeout=5000)
   public void testAppReportForEmptyTrackingUrl() throws Exception {
     configuration.set(YarnConfiguration.PROXY_ADDRESS, "localhost:9090");

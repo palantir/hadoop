@@ -27,7 +27,7 @@ import org.junit.Ignore;
  * Root dir operations against an S3 bucket.
  */
 
-@Ignore // palantir-hadoop
+@Ignore //palantir-hadoop
 public class ITestS3NContractRootDir extends
     AbstractContractRootDirectoryTest {
 

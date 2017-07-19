@@ -27,7 +27,7 @@ import org.junit.Ignore;
  * S3N contract tests opening files.
  */
 
-@Ignore // palantir-hadoop
+@Ignore //palantir-hadoop
 public class ITestS3NContractOpen extends AbstractContractOpenTest {
 
   @Override

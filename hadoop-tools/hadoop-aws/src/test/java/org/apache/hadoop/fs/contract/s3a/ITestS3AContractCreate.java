@@ -33,13 +33,13 @@ public class ITestS3AContractCreate extends AbstractContractCreateTest {
     return new S3AContract(conf);
   }
 
-  @Ignore // palantir-hadoop
+  @Ignore //palantir-hadoop
   @Override
   public void testOverwriteEmptyDirectory() throws Throwable {
     // Ignore this due to having reverted HADOOP-13188.
   }
 
-  @Ignore // palantir-hadoop
+  @Ignore //palantir-hadoop
   @Override
   public void testOverwriteNonEmptyDirectory() throws Throwable {
     // Ignore this due to having reverted HADOOP-13188.
