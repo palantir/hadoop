@@ -24,9 +24,6 @@ import static org.junit.Assert.assertTrue;
 import java.io.File;
 import java.io.IOException;
 import java.util.EnumSet;
-
-import org.junit.Assert;
-
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -49,6 +46,8 @@ import org.apache.hadoop.hdfs.util.MD5FileUtils;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.apache.hadoop.test.PathUtils;
 import org.apache.hadoop.util.Time;
+import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class TestFSImage {
@@ -61,6 +60,7 @@ public class TestFSImage {
     testPersistHelper(conf);
   }
 
+  @Ignore
   @Test
   public void testCompression() throws IOException {
     Configuration conf = new Configuration();
