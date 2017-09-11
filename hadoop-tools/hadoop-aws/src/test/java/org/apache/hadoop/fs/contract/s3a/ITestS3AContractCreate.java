@@ -32,4 +32,9 @@ public class ITestS3AContractCreate extends AbstractContractCreateTest {
     return new S3AContract(conf);
   }
 
+  @Override
+  public void testOverwriteEmptyDirectory() throws Throwable {
+    ContractTestUtils.skip(
+        "blobstores can't distinguish empty directories from files");
+  }
 }
