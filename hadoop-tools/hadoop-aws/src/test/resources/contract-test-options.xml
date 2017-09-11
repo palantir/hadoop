@@ -1,0 +1,19 @@
+
+<configuration>
+
+  <property>
+    <name>fs.contract.test.fs.s3a</name>
+    <value>s3a://gladiator-spark/</value>
+  </property>
+
+  <property>
+    <name>fs.contract.test.fs.s3n</name>
+    <value>s3n://gladiator-spark/</value>
+  </property>
+
+  <property>
+    <name>fs.contract.test.fs.s3</name>
+    <value>s3://gladiator-spark/</value>
+  </property>  
+
+</configuration>

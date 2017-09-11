@@ -32,9 +32,14 @@ public class ITestS3AContractCreate extends AbstractContractCreateTest {
     return new S3AContract(conf);
   }
 
+  /*
+   * // palantir-hadoop
+   * // Commented out because we revert HADOOP-13188
+   *
   @Override
   public void testOverwriteEmptyDirectory() throws Throwable {
     ContractTestUtils.skip(
         "blobstores can't distinguish empty directories from files");
   }
+  */
 }
