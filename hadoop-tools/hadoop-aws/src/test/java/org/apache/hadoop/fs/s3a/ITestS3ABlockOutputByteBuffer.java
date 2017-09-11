@@ -17,6 +17,7 @@
  */
 
 package org.apache.hadoop.fs.s3a;
+
 /**
  * Use {@link Constants#FAST_UPLOAD_BYTEBUFFER} for buffering.
  */
@@ -24,10 +25,6 @@ public class ITestS3ABlockOutputByteBuffer extends ITestS3ABlockOutputArray {
 
   protected String getBlockOutputBufferName() {
     return Constants.FAST_UPLOAD_BYTEBUFFER;
-  }
-
-  protected S3ADataBlocks.BlockFactory createFactory(S3AFileSystem fileSystem) {
-    return new S3ADataBlocks.ByteBufferBlockFactory(fileSystem);
   }
 
 }

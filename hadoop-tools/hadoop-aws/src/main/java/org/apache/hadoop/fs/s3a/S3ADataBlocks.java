@@ -24,8 +24,10 @@ import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.EOFException;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -40,11 +42,10 @@ import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.util.DirectBufferPool;
 
 import static org.apache.hadoop.fs.s3a.S3ADataBlocks.DataBlock.DestState.*;
-import static org.apache.hadoop.fs.s3a.S3AUtils.closeAll;
 
 /**
  * Set of classes to support output streaming into blocks which are then
- * uploaded as to S3 as a single PUT, or as part of a multipart request.
+ * uploaded as partitions.
  */
 final class S3ADataBlocks {
 
@@ -96,70 +97,6 @@ final class S3ADataBlocks {
   }
 
   /**
-   * The output information for an upload.
-   * It can be one of a file or an input stream.
-   * When closed, any stream is closed. Any source file is untouched.
-   */
-  static final class BlockUploadData implements Closeable {
-    private final File file;
-    private final InputStream uploadStream;
-
-    /**
-     * File constructor; input stream will be null.
-     * @param file file to upload
-     */
-    BlockUploadData(File file) {
-      Preconditions.checkArgument(file.exists(), "No file: " + file);
-      this.file = file;
-      this.uploadStream = null;
-    }
-
-    /**
-     * Stream constructor, file field will be null.
-     * @param uploadStream stream to upload
-     */
-    BlockUploadData(InputStream uploadStream) {
-      Preconditions.checkNotNull(uploadStream, "rawUploadStream");
-      this.uploadStream = uploadStream;
-      this.file = null;
-    }
-
-    /**
-     * Predicate: does this instance contain a file reference.
-     * @return true if there is a file.
-     */
-    boolean hasFile() {
-      return file != null;
-    }
-
-    /**
-     * Get the file, if there is one.
-     * @return the file for uploading, or null.
-     */
-    File getFile() {
-      return file;
-    }
-
-    /**
-     * Get the raw upload stream, if the object was
-     * created with one.
-     * @return the upload stream or null.
-     */
-    InputStream getUploadStream() {
-      return uploadStream;
-    }
-
-    /**
-     * Close: closes any upload stream provided in the constructor.
-     * @throws IOException inherited exception
-     */
-    @Override
-    public void close() throws IOException {
-      closeAll(LOG, uploadStream);
-    }
-  }
-
-  /**
    * Base class for block factories.
    */
   static abstract class BlockFactory implements Closeable {
@@ -173,21 +110,15 @@ final class S3ADataBlocks {
 
     /**
      * Create a block.
-     *
-     * @param index index of block
      * @param limit limit of the block.
-     * @param statistics stats to work with
      * @return a new block.
      */
-    abstract DataBlock create(long index, int limit,
-        S3AInstrumentation.OutputStreamStatistics statistics)
-        throws IOException;
+    abstract DataBlock create(int limit) throws IOException;
 
     /**
      * Implement any close/cleanup operation.
      * Base class is a no-op
-     * @throws IOException Inherited exception; implementations should
-     * avoid raising it.
+     * @throws IOException -ideally, it shouldn't.
      */
     @Override
     public void close() throws IOException {
@@ -209,14 +140,6 @@ final class S3ADataBlocks {
     enum DestState {Writing, Upload, Closed}
 
     private volatile DestState state = Writing;
-    protected final long index;
-    protected final S3AInstrumentation.OutputStreamStatistics statistics;
-
-    protected DataBlock(long index,
-        S3AInstrumentation.OutputStreamStatistics statistics) {
-      this.index = index;
-      this.statistics = statistics;
-    }
 
     /**
      * Atomically enter a state, verifying current state.
@@ -320,8 +243,8 @@ final class S3ADataBlocks {
      * @return the stream
      * @throws IOException trouble
      */
-    BlockUploadData startUpload() throws IOException {
-      LOG.debug("Start datablock[{}] upload", index);
+    InputStream startUpload() throws IOException {
+      LOG.debug("Start datablock upload");
       enterState(Writing, Upload);
       return null;
     }
@@ -355,23 +278,6 @@ final class S3ADataBlocks {
 
     }
 
-    /**
-     * A block has been allocated.
-     */
-    protected void blockAllocated() {
-      if (statistics != null) {
-        statistics.blockAllocated();
-      }
-    }
-
-    /**
-     * A block has been released.
-     */
-    protected void blockReleased() {
-      if (statistics != null) {
-        statistics.blockReleased();
-      }
-    }
   }
 
   // ====================================================================
@@ -386,10 +292,8 @@ final class S3ADataBlocks {
     }
 
     @Override
-    DataBlock create(long index, int limit,
-        S3AInstrumentation.OutputStreamStatistics statistics)
-        throws IOException {
-      return new ByteArrayBlock(0, limit, statistics);
+    DataBlock create(int limit) throws IOException {
+      return new ByteArrayBlock(limit);
     }
 
   }
@@ -430,13 +334,9 @@ final class S3ADataBlocks {
     // cache data size so that it is consistent after the buffer is reset.
     private Integer dataSize;
 
-    ByteArrayBlock(long index,
-        int limit,
-        S3AInstrumentation.OutputStreamStatistics statistics) {
-      super(index, statistics);
+    ByteArrayBlock(int limit) {
       this.limit = limit;
       buffer = new S3AByteArrayOutputStream(limit);
-      blockAllocated();
     }
 
     /**
@@ -449,12 +349,12 @@ final class S3ADataBlocks {
     }
 
     @Override
-    BlockUploadData startUpload() throws IOException {
+    InputStream startUpload() throws IOException {
       super.startUpload();
       dataSize = buffer.size();
       ByteArrayInputStream bufferData = buffer.getInputStream();
       buffer = null;
-      return new BlockUploadData(bufferData);
+      return bufferData;
     }
 
     @Override
@@ -478,14 +378,12 @@ final class S3ADataBlocks {
     @Override
     protected void innerClose() {
       buffer = null;
-      blockReleased();
     }
 
     @Override
     public String toString() {
-      return "ByteArrayBlock{"
-          +"index=" + index +
-          ", state=" + getState() +
+      return "ByteArrayBlock{" +
+          "state=" + getState() +
           ", limit=" + limit +
           ", dataSize=" + dataSize +
           '}';
@@ -497,6 +395,12 @@ final class S3ADataBlocks {
   /**
    * Stream via Direct ByteBuffers; these are allocated off heap
    * via {@link DirectBufferPool}.
+   * This is actually the most complex of all the block factories,
+   * due to the need to explicitly recycle buffers; in comparison, the
+   * {@link DiskBlock} buffer delegates the work of deleting files to
+   * the {@link DiskBlock.FileDeletingInputStream}. Here the
+   * input stream {@link ByteBufferInputStream} has a similar task, along
+   * with the foundational work of streaming data from a byte array.
    */
 
   static class ByteBufferBlockFactory extends BlockFactory {
@@ -509,10 +413,8 @@ final class S3ADataBlocks {
     }
 
     @Override
-    ByteBufferBlock create(long index, int limit,
-        S3AInstrumentation.OutputStreamStatistics statistics)
-        throws IOException {
-      return new ByteBufferBlock(index, limit, statistics);
+    ByteBufferBlock create(int limit) throws IOException {
+      return new ByteBufferBlock(limit);
     }
 
     private ByteBuffer requestBuffer(int limit) {
@@ -544,27 +446,21 @@ final class S3ADataBlocks {
 
     /**
      * A DataBlock which requests a buffer from pool on creation; returns
-     * it when it is closed.
+     * it when the output stream is closed.
      */
     class ByteBufferBlock extends DataBlock {
-      private ByteBuffer blockBuffer;
+      private ByteBuffer buffer;
       private final int bufferSize;
       // cache data size so that it is consistent after the buffer is reset.
       private Integer dataSize;
 
       /**
        * Instantiate. This will request a ByteBuffer of the desired size.
-       * @param index block index
        * @param bufferSize buffer size
-       * @param statistics statistics to update
        */
-      ByteBufferBlock(long index,
-          int bufferSize,
-          S3AInstrumentation.OutputStreamStatistics statistics) {
-        super(index, statistics);
+      ByteBufferBlock(int bufferSize) {
         this.bufferSize = bufferSize;
-        blockBuffer = requestBuffer(bufferSize);
-        blockAllocated();
+        buffer = requestBuffer(bufferSize);
       }
 
       /**
@@ -577,14 +473,13 @@ final class S3ADataBlocks {
       }
 
       @Override
-      BlockUploadData startUpload() throws IOException {
+      ByteBufferInputStream startUpload() throws IOException {
         super.startUpload();
         dataSize = bufferCapacityUsed();
         // set the buffer up from reading from the beginning
-        blockBuffer.limit(blockBuffer.position());
-        blockBuffer.position(0);
-        return new BlockUploadData(
-            new ByteBufferInputStream(dataSize, blockBuffer));
+        buffer.limit(buffer.position());
+        buffer.position(0);
+        return new ByteBufferInputStream(dataSize, buffer);
       }
 
       @Override
@@ -594,190 +489,182 @@ final class S3ADataBlocks {
 
       @Override
       public int remainingCapacity() {
-        return blockBuffer != null ? blockBuffer.remaining() : 0;
+        return buffer != null ? buffer.remaining() : 0;
       }
 
       private int bufferCapacityUsed() {
-        return blockBuffer.capacity() - blockBuffer.remaining();
+        return buffer.capacity() - buffer.remaining();
       }
 
       @Override
       int write(byte[] b, int offset, int len) throws IOException {
         super.write(b, offset, len);
         int written = Math.min(remainingCapacity(), len);
-        blockBuffer.put(b, offset, written);
+        buffer.put(b, offset, written);
         return written;
       }
 
-      /**
-       * Closing the block will release the buffer.
-       */
       @Override
       protected void innerClose() {
-        if (blockBuffer != null) {
-          blockReleased();
-          releaseBuffer(blockBuffer);
-          blockBuffer = null;
-        }
+        buffer = null;
       }
 
       @Override
       public String toString() {
         return "ByteBufferBlock{"
-            + "index=" + index +
-            ", state=" + getState() +
+            + "state=" + getState() +
             ", dataSize=" + dataSize() +
             ", limit=" + bufferSize +
             ", remainingCapacity=" + remainingCapacity() +
             '}';
       }
 
+    }
+
+    /**
+     * Provide an input stream from a byte buffer; supporting
+     * {@link #mark(int)}, which is required to enable replay of failed
+     * PUT attempts.
+     * This input stream returns the buffer to the pool afterwards.
+     */
+    class ByteBufferInputStream extends InputStream {
+
+      private final int size;
+      private ByteBuffer byteBuffer;
+
+      ByteBufferInputStream(int size, ByteBuffer byteBuffer) {
+        LOG.debug("Creating ByteBufferInputStream of size {}", size);
+        this.size = size;
+        this.byteBuffer = byteBuffer;
+      }
+
       /**
-       * Provide an input stream from a byte buffer; supporting
-       * {@link #mark(int)}, which is required to enable replay of failed
-       * PUT attempts.
+       * Return the buffer to the pool after the stream is closed.
        */
-      class ByteBufferInputStream extends InputStream {
-
-        private final int size;
-        private ByteBuffer byteBuffer;
-
-        ByteBufferInputStream(int size,
-            ByteBuffer byteBuffer) {
-          LOG.debug("Creating ByteBufferInputStream of size {}", size);
-          this.size = size;
-          this.byteBuffer = byteBuffer;
-        }
-
-        /**
-         * After the stream is closed, set the local reference to the byte
-         * buffer to null; this guarantees that future attempts to use
-         * stream methods will fail.
-         */
-        @Override
-        public synchronized void close() {
-          LOG.debug("ByteBufferInputStream.close() for {}",
-              ByteBufferBlock.super.toString());
+      @Override
+      public synchronized void close() {
+        if (byteBuffer != null) {
+          LOG.debug("releasing buffer");
+          releaseBuffer(byteBuffer);
           byteBuffer = null;
         }
+      }
 
-        /**
-         * Verify that the stream is open.
-         * @throws IOException if the stream is closed
-         */
-        private void verifyOpen() throws IOException {
-          if (byteBuffer == null) {
-            throw new IOException(FSExceptionMessages.STREAM_IS_CLOSED);
-          }
+      /**
+       * Verify that the stream is open.
+       * @throws IOException if the stream is closed
+       */
+      private void verifyOpen() throws IOException {
+        if (byteBuffer == null) {
+          throw new IOException(FSExceptionMessages.STREAM_IS_CLOSED);
+        }
+      }
+
+      public synchronized int read() throws IOException {
+        if (available() > 0) {
+          return byteBuffer.get() & 0xFF;
+        } else {
+          return -1;
+        }
+      }
+
+      @Override
+      public synchronized long skip(long offset) throws IOException {
+        verifyOpen();
+        long newPos = position() + offset;
+        if (newPos < 0) {
+          throw new EOFException(FSExceptionMessages.NEGATIVE_SEEK);
+        }
+        if (newPos > size) {
+          throw new EOFException(FSExceptionMessages.CANNOT_SEEK_PAST_EOF);
+        }
+        byteBuffer.position((int) newPos);
+        return newPos;
+      }
+
+      @Override
+      public synchronized int available() {
+        Preconditions.checkState(byteBuffer != null,
+            FSExceptionMessages.STREAM_IS_CLOSED);
+        return byteBuffer.remaining();
+      }
+
+      /**
+       * Get the current buffer position.
+       * @return the buffer position
+       */
+      public synchronized int position() {
+        return byteBuffer.position();
+      }
+
+      /**
+       * Check if there is data left.
+       * @return true if there is data remaining in the buffer.
+       */
+      public synchronized boolean hasRemaining() {
+        return byteBuffer.hasRemaining();
+      }
+
+      @Override
+      public synchronized void mark(int readlimit) {
+        LOG.debug("mark at {}", position());
+        byteBuffer.mark();
+      }
+
+      @Override
+      public synchronized void reset() throws IOException {
+        LOG.debug("reset");
+        byteBuffer.reset();
+      }
+
+      @Override
+      public boolean markSupported() {
+        return true;
+      }
+
+      /**
+       * Read in data.
+       * @param buffer destination buffer
+       * @param offset offset within the buffer
+       * @param length length of bytes to read
+       * @throws EOFException if the position is negative
+       * @throws IndexOutOfBoundsException if there isn't space for the
+       * amount of data requested.
+       * @throws IllegalArgumentException other arguments are invalid.
+       */
+      @SuppressWarnings("NullableProblems")
+      public synchronized int read(byte[] buffer, int offset, int length)
+          throws IOException {
+        Preconditions.checkArgument(length >= 0, "length is negative");
+        Preconditions.checkArgument(buffer != null, "Null buffer");
+        if (buffer.length - offset < length) {
+          throw new IndexOutOfBoundsException(
+              FSExceptionMessages.TOO_MANY_BYTES_FOR_DEST_BUFFER
+                  + ": request length =" + length
+                  + ", with offset =" + offset
+                  + "; buffer capacity =" + (buffer.length - offset));
+        }
+        verifyOpen();
+        if (!hasRemaining()) {
+          return -1;
         }
 
-        public synchronized int read() throws IOException {
-          if (available() > 0) {
-            return byteBuffer.get() & 0xFF;
-          } else {
-            return -1;
-          }
-        }
+        int toRead = Math.min(length, available());
+        byteBuffer.get(buffer, offset, toRead);
+        return toRead;
+      }
 
-        @Override
-        public synchronized long skip(long offset) throws IOException {
-          verifyOpen();
-          long newPos = position() + offset;
-          if (newPos < 0) {
-            throw new EOFException(FSExceptionMessages.NEGATIVE_SEEK);
-          }
-          if (newPos > size) {
-            throw new EOFException(FSExceptionMessages.CANNOT_SEEK_PAST_EOF);
-          }
-          byteBuffer.position((int) newPos);
-          return newPos;
+      @Override
+      public String toString() {
+        final StringBuilder sb = new StringBuilder(
+            "ByteBufferInputStream{");
+        sb.append("size=").append(size);
+        ByteBuffer buffer = this.byteBuffer;
+        if (buffer != null) {
+          sb.append(", available=").append(buffer.remaining());
         }
-
-        @Override
-        public synchronized int available() {
-          Preconditions.checkState(byteBuffer != null,
-              FSExceptionMessages.STREAM_IS_CLOSED);
-          return byteBuffer.remaining();
-        }
-
-        /**
-         * Get the current buffer position.
-         * @return the buffer position
-         */
-        public synchronized int position() {
-          return byteBuffer.position();
-        }
-
-        /**
-         * Check if there is data left.
-         * @return true if there is data remaining in the buffer.
-         */
-        public synchronized boolean hasRemaining() {
-          return byteBuffer.hasRemaining();
-        }
-
-        @Override
-        public synchronized void mark(int readlimit) {
-          LOG.debug("mark at {}", position());
-          byteBuffer.mark();
-        }
-
-        @Override
-        public synchronized void reset() throws IOException {
-          LOG.debug("reset");
-          byteBuffer.reset();
-        }
-
-        @Override
-        public boolean markSupported() {
-          return true;
-        }
-
-        /**
-         * Read in data.
-         * @param b destination buffer
-         * @param offset offset within the buffer
-         * @param length length of bytes to read
-         * @throws EOFException if the position is negative
-         * @throws IndexOutOfBoundsException if there isn't space for the
-         * amount of data requested.
-         * @throws IllegalArgumentException other arguments are invalid.
-         */
-        @SuppressWarnings("NullableProblems")
-        public synchronized int read(byte[] b, int offset, int length)
-            throws IOException {
-          Preconditions.checkArgument(length >= 0, "length is negative");
-          Preconditions.checkArgument(b != null, "Null buffer");
-          if (b.length - offset < length) {
-            throw new IndexOutOfBoundsException(
-                FSExceptionMessages.TOO_MANY_BYTES_FOR_DEST_BUFFER
-                    + ": request length =" + length
-                    + ", with offset =" + offset
-                    + "; buffer capacity =" + (b.length - offset));
-          }
-          verifyOpen();
-          if (!hasRemaining()) {
-            return -1;
-          }
-
-          int toRead = Math.min(length, available());
-          byteBuffer.get(b, offset, toRead);
-          return toRead;
-        }
-
-        @Override
-        public String toString() {
-          final StringBuilder sb = new StringBuilder(
-              "ByteBufferInputStream{");
-          sb.append("size=").append(size);
-          ByteBuffer buf = this.byteBuffer;
-          if (buf != null) {
-            sb.append(", available=").append(buf.remaining());
-          }
-          sb.append(", ").append(ByteBufferBlock.super.toString());
-          sb.append('}');
-          return sb.toString();
-        }
+        sb.append('}');
+        return sb.toString();
       }
     }
   }
@@ -794,29 +681,22 @@ final class S3ADataBlocks {
     }
 
     /**
-     * Create a temp file and a {@link DiskBlock} instance to manage it.
-     *
-     * @param index block index
+     * Create a temp file and a block which writes to it.
      * @param limit limit of the block.
-     * @param statistics statistics to update
      * @return the new block
      * @throws IOException IO problems
      */
     @Override
-    DataBlock create(long index,
-        int limit,
-        S3AInstrumentation.OutputStreamStatistics statistics)
-        throws IOException {
+    DataBlock create(int limit) throws IOException {
       File destFile = getOwner()
-          .createTmpFileForWrite(String.format("s3ablock-%04d-", index),
-              limit, getOwner().getConf());
-      return new DiskBlock(destFile, limit, index, statistics);
+          .createTmpFileForWrite("s3ablock", limit, getOwner().getConf());
+      return new DiskBlock(destFile, limit);
     }
   }
 
   /**
    * Stream to a file.
-   * This will stop at the limit; the caller is expected to create a new block.
+   * This will stop at the limit; the caller is expected to create a new block
    */
   static class DiskBlock extends DataBlock {
 
@@ -824,17 +704,12 @@ final class S3ADataBlocks {
     private final File bufferFile;
     private final int limit;
     private BufferedOutputStream out;
-    private final AtomicBoolean closed = new AtomicBoolean(false);
+    private InputStream uploadStream;
 
-    DiskBlock(File bufferFile,
-        int limit,
-        long index,
-        S3AInstrumentation.OutputStreamStatistics statistics)
+    DiskBlock(File bufferFile, int limit)
         throws FileNotFoundException {
-      super(index, statistics);
       this.limit = limit;
       this.bufferFile = bufferFile;
-      blockAllocated();
       out = new BufferedOutputStream(new FileOutputStream(bufferFile));
     }
 
@@ -863,7 +738,7 @@ final class S3ADataBlocks {
     }
 
     @Override
-    BlockUploadData startUpload() throws IOException {
+    InputStream startUpload() throws IOException {
       super.startUpload();
       try {
         out.flush();
@@ -871,7 +746,8 @@ final class S3ADataBlocks {
         out.close();
         out = null;
       }
-      return new BlockUploadData(bufferFile);
+      uploadStream = new FileInputStream(bufferFile);
+      return new FileDeletingInputStream(uploadStream);
     }
 
     /**
@@ -879,7 +755,6 @@ final class S3ADataBlocks {
      * exists.
      * @throws IOException IO problems
      */
-    @SuppressWarnings("UnnecessaryDefault")
     @Override
     protected void innerClose() throws IOException {
       final DestState state = getState();
@@ -888,19 +763,20 @@ final class S3ADataBlocks {
       case Writing:
         if (bufferFile.exists()) {
           // file was not uploaded
-          LOG.debug("Block[{}]: Deleting buffer file as upload did not start",
-              index);
-          closeBlock();
+          LOG.debug("Deleting buffer file as upload did not start");
+          boolean deleted = bufferFile.delete();
+          if (!deleted && bufferFile.exists()) {
+            LOG.warn("Failed to delete buffer file {}", bufferFile);
+          }
         }
         break;
 
       case Upload:
-        LOG.debug("Block[{}]: Buffer file {} exists —close upload stream",
-            index, bufferFile);
+        LOG.debug("Buffer file {} exists —close upload stream", bufferFile);
         break;
 
       case Closed:
-        closeBlock();
+        // no-op
         break;
 
       default:
@@ -922,8 +798,7 @@ final class S3ADataBlocks {
     @Override
     public String toString() {
       String sb = "FileBlock{"
-          + "index=" + index
-          + ", destFile=" + bufferFile +
+          + "destFile=" + bufferFile +
           ", state=" + getState() +
           ", dataSize=" + dataSize() +
           ", limit=" + limit +
@@ -932,20 +807,31 @@ final class S3ADataBlocks {
     }
 
     /**
-     * Close the block.
-     * This will delete the block's buffer file if the block has
-     * not previously been closed.
+     * An input stream which deletes the buffer file when closed.
      */
-    void closeBlock() {
-      LOG.debug("block[{}]: closeBlock()", index);
-      if (!closed.getAndSet(true)) {
-        blockReleased();
-        if (!bufferFile.delete() && bufferFile.exists()) {
-          LOG.warn("delete({}) returned false",
-              bufferFile.getAbsoluteFile());
+    private final class FileDeletingInputStream extends FilterInputStream {
+      private final AtomicBoolean closed = new AtomicBoolean(false);
+
+      FileDeletingInputStream(InputStream source) {
+        super(source);
+      }
+
+      /**
+       * Delete the input file when closed.
+       * @throws IOException IO problem
+       */
+      @Override
+      public void close() throws IOException {
+        try {
+          super.close();
+        } finally {
+          if (!closed.getAndSet(true)) {
+            if (!bufferFile.delete()) {
+              LOG.warn("delete({}) returned false",
+                  bufferFile.getAbsoluteFile());
+            }
+          }
         }
-      } else {
-        LOG.debug("block[{}]: skipping re-entrant closeBlock()", index);
       }
     }
   }

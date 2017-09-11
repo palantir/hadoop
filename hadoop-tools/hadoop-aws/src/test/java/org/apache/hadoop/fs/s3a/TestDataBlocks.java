@@ -51,8 +51,9 @@ public class TestDataBlocks extends Assert {
              new S3ADataBlocks.ByteBufferBlockFactory(null)) {
       int limit = 128;
       S3ADataBlocks.ByteBufferBlockFactory.ByteBufferBlock block
-          = factory.create(1, limit, null);
-      assertOutstandingBuffers(factory, 1);
+          = factory.create(limit);
+      assertEquals("outstanding buffers in " + factory,
+          1, factory.getOutstandingBufferCount());
 
       byte[] buffer = ContractTestUtils.toAsciiByteArray("test data");
       int bufferLen = buffer.length;
@@ -65,23 +66,24 @@ public class TestDataBlocks extends Assert {
           block.hasCapacity(limit - bufferLen));
 
       // now start the write
-      S3ADataBlocks.BlockUploadData blockUploadData = block.startUpload();
-      S3ADataBlocks.ByteBufferBlockFactory.ByteBufferBlock.ByteBufferInputStream
-          stream =
-          (S3ADataBlocks.ByteBufferBlockFactory.ByteBufferBlock.ByteBufferInputStream)
-              blockUploadData.getUploadStream();
-      assertTrue("Mark not supported in " + stream, stream.markSupported());
+      S3ADataBlocks.ByteBufferBlockFactory.ByteBufferInputStream
+          stream = block.startUpload();
       assertTrue("!hasRemaining() in " + stream, stream.hasRemaining());
       int expected = bufferLen;
       assertEquals("wrong available() in " + stream,
           expected, stream.available());
 
       assertEquals('t', stream.read());
-      stream.mark(limit);
       expected--;
       assertEquals("wrong available() in " + stream,
           expected, stream.available());
 
+      // close the block. The buffer must remain outstanding here;
+      // the stream manages the lifecycle of it now
+      block.close();
+      assertEquals("outstanding buffers in " + factory,
+          1, factory.getOutstandingBufferCount());
+      block.close();
 
       // read into a byte array with an offset
       int offset = 5;
@@ -107,31 +109,16 @@ public class TestDataBlocks extends Assert {
           0, stream.available());
       assertTrue("hasRemaining() in " + stream, !stream.hasRemaining());
 
-      // go the mark point
-      stream.reset();
-      assertEquals('e', stream.read());
-
       // when the stream is closed, the data should be returned
       stream.close();
-      assertOutstandingBuffers(factory, 1);
-      block.close();
-      assertOutstandingBuffers(factory, 0);
+      assertEquals("outstanding buffers in " + factory,
+          0, factory.getOutstandingBufferCount());
       stream.close();
-      assertOutstandingBuffers(factory, 0);
+      assertEquals("outstanding buffers in " + factory,
+          0, factory.getOutstandingBufferCount());
+
     }
 
-  }
-
-  /**
-   * Assert the number of buffers active for a block factory.
-   * @param factory factory
-   * @param expectedCount expected count.
-   */
-  private static void assertOutstandingBuffers(
-      S3ADataBlocks.ByteBufferBlockFactory factory,
-      int expectedCount) {
-    assertEquals("outstanding buffers in " + factory,
-        expectedCount, factory.getOutstandingBufferCount());
   }
 
 }

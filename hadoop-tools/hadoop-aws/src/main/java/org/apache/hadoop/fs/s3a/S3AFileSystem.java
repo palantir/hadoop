@@ -993,7 +993,6 @@ public class S3AFileSystem extends FileSystem {
    */
   public PutObjectRequest newPutObjectRequest(String key,
       ObjectMetadata metadata, File srcfile) {
-    Preconditions.checkNotNull(srcfile);
     PutObjectRequest putObjectRequest = new PutObjectRequest(bucket, key,
         srcfile);
     putObjectRequest.setCannedAcl(cannedACL);
@@ -1010,9 +1009,8 @@ public class S3AFileSystem extends FileSystem {
    * @param inputStream source data.
    * @return the request
    */
-  private PutObjectRequest newPutObjectRequest(String key,
+  PutObjectRequest newPutObjectRequest(String key,
       ObjectMetadata metadata, InputStream inputStream) {
-    Preconditions.checkNotNull(inputStream);
     PutObjectRequest putObjectRequest = new PutObjectRequest(bucket, key,
         inputStream, metadata);
     putObjectRequest.setCannedAcl(cannedACL);
@@ -1050,16 +1048,12 @@ public class S3AFileSystem extends FileSystem {
   }
 
   /**
-   * Start a transfer-manager managed async PUT of an object,
-   * incrementing the put requests and put bytes
+   * PUT an object, incrementing the put requests and put bytes
    * counters.
    * It does not update the other counters,
    * as existing code does that as progress callbacks come in.
    * Byte length is calculated from the file length, or, if there is no
    * file, from the content length of the header.
-   * Because the operation is async, any stream supplied in the request
-   * must reference data (files, buffers) which stay valid until the upload
-   * completes.
    * @param putObjectRequest the request
    * @return the upload initiated
    */
@@ -1085,7 +1079,6 @@ public class S3AFileSystem extends FileSystem {
    * PUT an object directly (i.e. not via the transfer manager).
    * Byte length is calculated from the file length, or, if there is no
    * file, from the content length of the header.
-   * <i>Important: this call will close any input stream in the request.</i>
    * @param putObjectRequest the request
    * @return the upload initiated
    * @throws AmazonClientException on problems
@@ -1111,8 +1104,7 @@ public class S3AFileSystem extends FileSystem {
 
   /**
    * Upload part of a multi-partition file.
-   * Increments the write and put counters.
-   * <i>Important: this call does not close any input stream in the request.</i>
+   * Increments the write and put counters
    * @param request request
    * @return the result of the operation.
    * @throws AmazonClientException on problems
@@ -2210,28 +2202,14 @@ public class S3AFileSystem extends FileSystem {
 
     /**
      * Create a {@link PutObjectRequest} request.
-     * If {@code length} is set, the metadata is configured with the size of
-     * the upload.
+     * The metadata is assumed to have been configured with the size of the
+     * operation.
      * @param inputStream source data.
      * @param length size, if known. Use -1 for not known
      * @return the request
      */
     PutObjectRequest newPutRequest(InputStream inputStream, long length) {
-      PutObjectRequest request = newPutObjectRequest(key,
-          newObjectMetadata(length), inputStream);
-      return request;
-    }
-
-    /**
-     * Create a {@link PutObjectRequest} request to upload a file.
-     * @param sourceFile source file
-     * @return the request
-     */
-    PutObjectRequest newPutRequest(File sourceFile) {
-      int length = (int) sourceFile.length();
-      PutObjectRequest request = newPutObjectRequest(key,
-          newObjectMetadata(length), sourceFile);
-      return request;
+      return newPutObjectRequest(key, newObjectMetadata(length), inputStream);
     }
 
     /**
@@ -2307,51 +2285,42 @@ public class S3AFileSystem extends FileSystem {
     /**
      * Abort a multipart upload operation.
      * @param uploadId multipart operation Id
+     * @return the result
      * @throws AmazonClientException on problems.
      */
     void abortMultipartUpload(String uploadId) throws AmazonClientException {
-      LOG.debug("Aborting multipart upload {}", uploadId);
       s3.abortMultipartUpload(
           new AbortMultipartUploadRequest(bucket, key, uploadId));
     }
 
     /**
      * Create and initialize a part request of a multipart upload.
-     * Exactly one of: {@code uploadStream} or {@code sourceFile}
-     * must be specified.
      * @param uploadId ID of ongoing upload
+     * @param uploadStream source of data to upload
      * @param partNumber current part number of the upload
      * @param size amount of data
-     * @param uploadStream source of data to upload
-     * @param sourceFile optional source file.
      * @return the request.
      */
     UploadPartRequest newUploadPartRequest(String uploadId,
-        int partNumber, int size, InputStream uploadStream, File sourceFile) {
+        InputStream uploadStream,
+        int partNumber,
+        int size) {
       Preconditions.checkNotNull(uploadId);
-      // exactly one source must be set; xor verifies this
-      Preconditions.checkArgument((uploadStream != null) ^ (sourceFile != null),
-          "Data source");
+      Preconditions.checkNotNull(uploadStream);
       Preconditions.checkArgument(size > 0, "Invalid partition size %s", size);
-      Preconditions.checkArgument(partNumber > 0 && partNumber <= 10000,
+      Preconditions.checkArgument(partNumber> 0 && partNumber <=10000,
           "partNumber must be between 1 and 10000 inclusive, but is %s",
           partNumber);
 
       LOG.debug("Creating part upload request for {} #{} size {}",
           uploadId, partNumber, size);
-      UploadPartRequest request = new UploadPartRequest()
+      return new UploadPartRequest()
           .withBucketName(bucket)
           .withKey(key)
           .withUploadId(uploadId)
+          .withInputStream(uploadStream)
           .withPartNumber(partNumber)
           .withPartSize(size);
-      if (uploadStream != null) {
-        // there's an upload stream. Bind to it.
-        request.setInputStream(uploadStream);
-      } else {
-        request.setFile(sourceFile);
-      }
-      return request;
     }
 
     /**
@@ -2365,21 +2334,6 @@ public class S3AFileSystem extends FileSystem {
       sb.append(", key='").append(key).append('\'');
       sb.append('}');
       return sb.toString();
-    }
-
-    /**
-     * PUT an object directly (i.e. not via the transfer manager).
-     * @param putObjectRequest the request
-     * @return the upload initiated
-     * @throws IOException on problems
-     */
-    PutObjectResult putObject(PutObjectRequest putObjectRequest)
-        throws IOException {
-      try {
-        return putObjectDirect(putObjectRequest);
-      } catch (AmazonClientException e) {
-        throw translateException("put", putObjectRequest.getKey(), e);
-      }
     }
   }
 
