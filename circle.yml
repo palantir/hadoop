@@ -12,17 +12,17 @@ checkout:
     - echo "realm=Bintray API Realm" >> .credentials
     - echo "host=api.bintray.com" >> .credentials
 
-compile:
-  override:
-    - mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB" | grep -v "Downloading"
-
 dependencies:
   override:
     - wget http://www-eu.apache.org/dist/maven/maven-3/3.5.2/binaries/apache-maven-3.5.2-bin.tar.gz
     - tar xfz apache-maven-3.5.2-bin.tar.gz
     - export M2_HOME="$PWD/apache-maven-3.5.2"
-    - M2=$M2_HOME/bin
+    - export M2=$M2_HOME/bin
     - export PATH=$M2:$PATH
+
+compile:
+  override:
+    - mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB" | grep -v "Downloading"
 
 test:
   override:
