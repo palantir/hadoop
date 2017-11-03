@@ -15,10 +15,8 @@ checkout:
 dependencies:
   override:
     - wget http://www-eu.apache.org/dist/maven/maven-3/3.5.2/binaries/apache-maven-3.5.2-bin.tar.gz
-    - tar xfz apache-maven-3.5.2-bin.tar.gz
-    - export M2_HOME="$PWD/apache-maven-3.5.2"
-    - export M2=$M2_HOME/bin
-    - export PATH=$M2:$PATH
+    - sudo tar xfz apache-maven-3.5.2-bin.tar.gz -C /usr/local/
+    - sudo ln -sf /usr/local/apache-maven-3.5.2/bin/mvn /usr/local/apache-maven/bin/mvn
 
 compile:
   override:
