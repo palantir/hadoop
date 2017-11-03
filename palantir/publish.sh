@@ -16,7 +16,7 @@ mvn -e install -DskipTests -Dmaven.javadoc.skip=true
 mvn -e --settings $tmp_settings -DskipTests deploy
 
 # Publish a dist to Bintray
-mvn package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
+mvn -e package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
 curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T hadoop-dist/target/hadoop-${version}.tar.gz "https://api.bintray.com/content/palantir/releases/hadoop/${version}/org/apache/hadoop/hadoop-dist/${version}/${file_name}"
 
 # Tell Bintray to publish the artifacts for this release
