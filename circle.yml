@@ -20,7 +20,7 @@ dependencies:
 
 compile:
   override:
-    - mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "KB" | grep -v "Downloading"
+    - mvn -T 1C clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "Progress" | grep -v "Downloading"
 
 test:
   override:
