@@ -30,7 +30,7 @@ test:
             cd hadoop-common-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           1)
-            cd hadoop-hdfs-project && mvn test --fail-never -pl '!hadoop-hdfs/src/contrib/bkjournal','!hadoop-hdfs-nfs' | grep -v "ignoring option MaxPermSize"
+            cd hadoop-hdfs-project && mvn test --fail-never -pl '!hadoop-hdfs' | grep -v "ignoring option MaxPermSize"
             ;;
           2)
             cd hadoop-mapreduce-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
