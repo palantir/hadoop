@@ -341,7 +341,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
         conf.getBoolean(YarnConfiguration.CURATOR_LEADER_ELECTOR,
             YarnConfiguration.DEFAULT_CURATOR_LEADER_ELECTOR_ENABLED);
     if (curatorEnabled) {
-      this.zkManager = getAndStartZKManager(conf);
+      this.zkManager = createAndStartZKManager(conf);
       elector = new CuratorBasedElectorService(this);
     } else {
       elector = new ActiveStandbyElectorBasedElectorService(this);
@@ -355,11 +355,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
    * @return ZooKeeper Curator manager.
    * @throws IOException If it cannot create the manager.
    */
-  public synchronized ZKCuratorManager getAndStartZKManager(Configuration
+  public ZKCuratorManager createAndStartZKManager(Configuration
       config) throws IOException {
-    if (this.zkManager != null) {
-      return zkManager;
-    }
     ZKCuratorManager manager = new ZKCuratorManager(config);
 
     // Get authentication
@@ -379,7 +376,10 @@ public class ResourceManager extends CompositeService implements Recoverable {
     }
 
     manager.start(authInfos);
-    this.zkManager = manager;
+    return manager;
+  }
+
+  public ZKCuratorManager getZKManager() {
     return zkManager;
   }
 
@@ -493,7 +493,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   }
 
   private RMTimelineCollectorManager createRMTimelineCollectorManager() {
-    return new RMTimelineCollectorManager(rmContext);
+    return new RMTimelineCollectorManager(this);
   }
 
   protected SystemMetricsPublisher createSystemMetricsPublisher() {
@@ -504,7 +504,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
         // we're dealing with the v.2.x publisher
         LOG.info("system metrics publisher with the timeline service V2 is " +
             "configured");
-        publisher = new TimelineServiceV2Publisher(rmContext);
+        publisher = new TimelineServiceV2Publisher(
+            rmContext.getRMTimelineCollectorManager());
       } else {
         // we're dealing with the v.1.x publisher
         LOG.info("system metrics publisher with the timeline service V1 is " +
@@ -1081,9 +1082,11 @@ public class ResourceManager extends CompositeService implements Recoverable {
     WebAppContext uiWebAppContext = null;
     if (getConfig().getBoolean(YarnConfiguration.YARN_WEBAPP_UI2_ENABLE,
         YarnConfiguration.DEFAULT_YARN_WEBAPP_UI2_ENABLE)) {
-      String webPath = UI2_WEBAPP_NAME;
       String onDiskPath = getConfig()
           .get(YarnConfiguration.YARN_WEBAPP_UI2_WARFILE_PATH);
+
+      uiWebAppContext = new WebAppContext();
+      uiWebAppContext.setContextPath(UI2_WEBAPP_NAME);
 
       if (null == onDiskPath) {
         String war = "hadoop-yarn-ui-" + VersionInfo.getVersion() + ".war";
@@ -1091,21 +1094,34 @@ public class ResourceManager extends CompositeService implements Recoverable {
         URL url = cl.findResource(war);
 
         if (null == url) {
-          onDiskPath = "";
+          onDiskPath = getWebAppsPath("ui2");
         } else {
           onDiskPath = url.getFile();
         }
-
-        LOG.info(
-            "New web UI war file name:" + war + ", and path:" + onDiskPath);
       }
 
-      uiWebAppContext = new WebAppContext();
-      uiWebAppContext.setContextPath(webPath);
-      uiWebAppContext.setWar(onDiskPath);
+      if (onDiskPath == null || onDiskPath.isEmpty()) {
+          LOG.error("No war file or webapps found for ui2 !");
+      } else {
+        if (onDiskPath.endsWith(".war")) {
+          uiWebAppContext.setWar(onDiskPath);
+          LOG.info("Using war file at: " + onDiskPath);
+        } else {
+          uiWebAppContext.setResourceBase(onDiskPath);
+          LOG.info("Using webapps at: " + onDiskPath);
+        }
+      }
     }
 
     webApp = builder.start(new RMWebApp(this), uiWebAppContext);
+  }
+
+  private String getWebAppsPath(String appName) {
+    URL url = getClass().getClassLoader().getResource("webapps/" + appName);
+    if (url == null) {
+      return "";
+    }
+    return url.toString();
   }
 
   /**
