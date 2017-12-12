@@ -26,17 +26,11 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.FileSystem.Statistics;
 import org.apache.hadoop.metrics2.MetricStringBuilder;
-<<<<<<< HEAD
 import org.apache.hadoop.metrics2.annotation.Metrics;
-=======
 import org.apache.hadoop.metrics2.MetricsCollector;
-import org.apache.hadoop.metrics2.MetricsInfo;
-import org.apache.hadoop.metrics2.MetricsRecordBuilder;
 import org.apache.hadoop.metrics2.MetricsSource;
 import org.apache.hadoop.metrics2.MetricsSystem;
-import org.apache.hadoop.metrics2.MetricsTag;
 import org.apache.hadoop.metrics2.impl.MetricsSystemImpl;
->>>>>>> 6555af81a26... HADOOP-14475 Metrics of S3A don't print out when enabled. Contributed by Younger and Sean Mackrory.
 import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MetricsRegistry;
 import org.apache.hadoop.metrics2.lib.MutableCounterLong;
@@ -221,12 +215,7 @@ public class S3AInstrumentation implements Closeable, MetricsSource {
     }
     //todo need a config for the quantiles interval?
     quantiles(S3GUARD_METADATASTORE_PUT_PATH_LATENCY,
-<<<<<<< HEAD
         "ops", "latency", 1);
-=======
-        "ops", "latency", interval);
-    quantiles(S3GUARD_METADATASTORE_THROTTLE_RATE,
-        "events", "frequency (Hz)", interval);
 
     registerAsMetricsSource(name);
   }
@@ -260,7 +249,6 @@ public class S3AInstrumentation implements Closeable, MetricsSource {
     }
     metricsSourceName = msName + "-" + name.getHost();
     metricsSystem.register(metricsSourceName, "", this);
->>>>>>> 6555af81a26... HADOOP-14475 Metrics of S3A don't print out when enabled. Contributed by Younger and Sean Mackrory.
   }
 
   /**
