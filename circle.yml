@@ -20,32 +20,11 @@ dependencies:
 
 compile:
   override:
-    - mvn clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "Progress" | grep -v "Downloading"
+    - echo ""
 
 test:
   override:
-    - ? |
-          case $CIRCLE_NODE_INDEX in
-          0)
-            #cd hadoop-common-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
-            ;;
-          1)
-            #cd hadoop-hdfs-project && mvn -T 1C test --fail-never -pl '!hadoop-hdfs-nfs' | grep -v "ignoring option MaxPermSize"
-            ;;
-          2)
-            #cd hadoop-mapreduce-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
-            ;;
-          3)
-            #cd hadoop-tools && mvn -T 1C test --fail-never -pl '!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
-            ;;
-          4)
-            #cd hadoop-yarn-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
-            ;;
-          esac
-      :
-        max-runtime: 57600
-        parallel: true
-        timeout: 1200
+    - echo ""
 
 deployment:
   release:
