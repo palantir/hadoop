@@ -12,7 +12,7 @@ echo "</server></servers></settings>" >> $tmp_settings
 
 # Deploy JARs to Bintray
 mvn -e versions:set -DnewVersion=$version
-mvn -e install -DskipTests -Dmaven.javadoc.skip=true
+mvn -e install -DskipTests -Dmaven.javadoc.skip=true | grep -v 'Progress'
 mvn -e --settings $tmp_settings -DskipTests deploy
 
 # Publish a dist to Bintray
