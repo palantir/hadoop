@@ -1,6 +1,5 @@
 #!/bin/bash
 set -euo pipefail
-set -x
 
 version=$(git describe --tags --always)
 file_name="hadoop-dist-${version}.tgz"
@@ -13,8 +12,7 @@ echo "</server></servers></settings>" >> $tmp_settings
 
 # Deploy JARs to Bintray
 mvn -e versions:set -DnewVersion=$version
-mvn -e versions:commit
-mvn -e --settings $tmp_settings -DskipTests deploy | grep -v 'Progress'
+mvn -X --settings $tmp_settings -DskipTests deploy | grep -v 'Progress'
 
 # Publish a dist to Bintray
 mvn -e package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
