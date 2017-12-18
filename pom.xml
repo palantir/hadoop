@@ -37,7 +37,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
   <distributionManagement>
     <repository>
       <id>bintray-palantir-release</id>
-      <url>file:///Users/srand/tmpMaven//</url>
+      <url>https://api.bintray.com/maven/palantir/releases/hadoop/</url>
     </repository>
     <snapshotRepository>
       <id>${distMgmtSnapshotsId}</id>
@@ -53,7 +53,7 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xs
   <repositories>
     <repository>
       <id>bintray-palantir-release</id>
-      <url>file:///Users/srand/tmpMaven//</url>
+      <url>https://api.bintray.com/maven/palantir/releases/hadoop/</url>
     </repository>
     <repository>
       <id>repository.jboss.org</id>
