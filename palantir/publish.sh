@@ -4,16 +4,16 @@ set -euo pipefail
 version=$(git describe --tags --always)
 file_name="hadoop-dist-${version}.tgz"
 
-tmp_settings="tmp-settings.xml"
-echo "<settings><servers><server>" > $tmp_settings
-echo "<id>bintray-palantir-release</id><username>$BINTRAY_USERNAME</username>" >> $tmp_settings
-echo "<password>$BINTRAY_PASSWORD</password>" >> $tmp_settings
-echo "</server></servers></settings>" >> $tmp_settings
+#tmp_settings="tmp-settings.xml"
+#echo "<settings><servers><server>" > $tmp_settings
+#echo "<id>bintray-palantir-release</id><username>$BINTRAY_USERNAME</username>" >> $tmp_settings
+#echo "<password>$BINTRAY_PASSWORD</password>" >> $tmp_settings
+#echo "</server></servers></settings>" >> $tmp_settings
 
 # Deploy JARs to Bintray
 mvn -e versions:set -DnewVersion=$version
-mvn -e install -DskipTests -Dmaven.javadoc.skip=true
-mvn -e --settings $tmp_settings -DskipTests deploy
+#mvn -e install -DskipTests -Dmaven.javadoc.skip=true
+#mvn -e --settings $tmp_settings -DskipTests deploy
 
 # Publish a dist to Bintray
 mvn -e package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
