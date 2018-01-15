@@ -17,6 +17,10 @@ dependencies:
     - wget http://www-eu.apache.org/dist/maven/maven-3/3.5.2/binaries/apache-maven-3.5.2-bin.tar.gz
     - sudo tar xfz apache-maven-3.5.2-bin.tar.gz -C /usr/local/
     - sudo ln -sf /usr/local/apache-maven-3.5.2/bin/mvn /usr/local/apache-maven/bin/mvn
+    - sudo apt-get install software-properties-common
+    - sudo add-apt-repository ppa:george-edison55/cmake-3.x -y
+    - sudo apt-get update
+    - sudo apt-get install --only-upgrade cmake
 
 compile:
   override:
@@ -27,19 +31,19 @@ test:
     - ? |
           case $CIRCLE_NODE_INDEX in
           0)
-            cd hadoop-common-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
+            #cd hadoop-common-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           1)
-            cd hadoop-hdfs-project && mvn -T 1C test --fail-never -pl '!hadoop-hdfs-nfs' | grep -v "ignoring option MaxPermSize"
+            #cd hadoop-hdfs-project && mvn -T 1C test --fail-never -pl '!hadoop-hdfs-nfs' | grep -v "ignoring option MaxPermSize"
             ;;
           2)
-            cd hadoop-mapreduce-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
+            #cd hadoop-mapreduce-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           3)
-            cd hadoop-tools && mvn -T 1C test --fail-never -pl '!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
+            #cd hadoop-tools && mvn -T 1C test --fail-never -pl '!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
             ;;
           4)
-            cd hadoop-yarn-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
+            #cd hadoop-yarn-project && mvn -T 1C test --fail-never | grep -v "ignoring option MaxPermSize"
             ;;
           esac
       :
