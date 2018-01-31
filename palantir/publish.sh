@@ -12,8 +12,8 @@ echo "</server></servers></settings>" >> $tmp_settings
 
 # Deploy JARs to Bintray
 mvn -e versions:set -DnewVersion=$version
-mvn -e install -DskipTests -Dmaven.javadoc.skip=true
-mvn -e --settings $tmp_settings -DskipTests deploy
+mvn -e -pl hadoop-maven-plugins -am clean install
+mvn -e --settings $tmp_settings -DskipTests deploy | grep -v 'Progress'
 
 # Publish a dist to Bintray
 mvn -e package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
