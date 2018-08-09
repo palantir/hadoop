@@ -14,9 +14,9 @@ checkout:
 
 dependencies:
   override:
-    - wget http://www-eu.apache.org/dist/maven/maven-3/3.5.2/binaries/apache-maven-3.5.2-bin.tar.gz
-    - sudo tar xfz apache-maven-3.5.2-bin.tar.gz -C /usr/local/
-    - sudo ln -sf /usr/local/apache-maven-3.5.2/bin/mvn /usr/local/apache-maven/bin/mvn
+    - wget http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz
+    - sudo tar xfz apache-maven-3.5.4-bin.tar.gz -C /usr/local/
+    - sudo ln -sf /usr/local/apache-maven-3.5.4/bin/mvn /usr/local/apache-maven/bin/mvn
 
 compile:
   override:
