@@ -1,0 +1,58 @@
+machine:
+  java:
+    version: oraclejdk8
+  environment:
+    TERM: dumb
+
+checkout:
+  post:
+    - "[[ ! -s \"$(git rev-parse --git-dir)/shallow\" ]] || git fetch --unshallow"
+    - echo "user=$BINTRAY_USERNAME" > .credentials
+    - echo "password=$BINTRAY_PASSWORD" >> .credentials
+    - echo "realm=Bintray API Realm" >> .credentials
+    - echo "host=api.bintray.com" >> .credentials
+
+dependencies:
+  override:
+    - wget http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz
+    - sudo tar xfz apache-maven-3.5.4-bin.tar.gz -C /usr/local/
+    - sudo ln -sf /usr/local/apache-maven-3.5.4/bin/mvn /usr/local/apache-maven/bin/mvn
+
+compile:
+  override:
+    - mvn clean install -DskipTests -Dmaven.javadoc.skip=true | grep -v "Progress" | grep -v "Downloading"
+
+test:
+  override:
+    - ? |
+          case $CIRCLE_NODE_INDEX in
+          0)
+            cd hadoop-common-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+            ;;
+          1)
+            cd hadoop-hdfs-project && mvn test --fail-never -pl '!hadoop-hdfs' | grep -v "ignoring option MaxPermSize"
+            ;;
+          2)
+            cd hadoop-mapreduce-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+            ;;
+          3)
+            cd hadoop-tools && mvn test --fail-never -pl '!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
+            ;;
+          4)
+            cd hadoop-yarn-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+            ;;
+          esac
+      :
+        max-runtime: 57600
+        parallel: true
+        timeout: 1200
+
+deployment:
+  release:
+    tag: /3.1.1-palantir.[0-9]+/
+    commands:
+      - ./palantir/publish.sh
+  rc:
+    tag: /3.1.1-palantir.[0-9]+-rc[0-9]+/
+    commands:
+      - ./palantir/publish.sh
