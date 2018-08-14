@@ -1873,7 +1873,7 @@
         <dependencies>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>${hbase-server-artifactid}</artifactId>
+            <artifactId>hadoop-yarn-server-timelineservice-hbase-server-1</artifactId>
             <version>${project.version}</version>
           </dependency>
         </dependencies>
@@ -1900,7 +1900,7 @@
         <dependencies>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>${hbase-server-artifactid}</artifactId>
+            <artifactId>hadoop-yarn-server-timelineservice-hbase-server-2</artifactId>
             <version>${project.version}</version>
           </dependency>
         </dependencies>
