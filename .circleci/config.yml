@@ -2,7 +2,7 @@ version: 2
 
 defaults: &defaults
   docker:
-    - image: palantirtechnologies/circle-parquet
+    - image: palantirtechnologies/circle-hadoop-2
   resource_class: xlarge
   environment: &defaults-environment
     TERM: dumb
