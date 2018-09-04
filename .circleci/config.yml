@@ -133,6 +133,7 @@ jobs:
               4)
                 cd hadoop-yarn-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
                 ;;
+            esac
           no_output_timeout: 15m
       - run:
           name: Save test results
