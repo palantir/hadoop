@@ -2,8 +2,7 @@ version: 2
 
 jobs:
   build:
-    docker:
-      - image: palantirtechnologies/circle-spark-base
+    machine: true
     steps:
       - checkout
       - run: ./palantir/docker/publish-docker.sh
