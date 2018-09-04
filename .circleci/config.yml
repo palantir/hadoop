@@ -23,11 +23,6 @@ deployable-branches-and-tags: &deployable-branches-and-tags
 # Step templates
 
 step_templates:
-  restore-build-binaries-cache: &restore-build-binaries-cache
-    restore_cache:
-      keys:
-        - build-binaries-{{ checksum "mvn" }}
-        - build-binaries-
   restore-maven-dependency-cache: &restore-maven-dependency-cache
     restore_cache:
       keys:
@@ -100,7 +95,6 @@ jobs:
     steps:
       - *checkout-code
       - *restore-maven-dependency-cache
-      - *restore-build-binaries-cache
       - run: mvn -T1C -B -DskipTests install
       - persist_to_workspace:
           root: .
@@ -123,7 +117,6 @@ jobs:
       - attach_workspace:
           at: .
       - *restore-maven-dependency-cache
-      - *restore-build-binaries-cache
       - run:
           name: Run all tests
           command: mvn test
@@ -144,7 +137,6 @@ jobs:
     steps:
       - *checkout-code
       - *restore-maven-dependency-cache
-      - *restore-build-binaries-cache
       - run:
           command: dev/set_version_and_package.sh
       - persist_to_workspace:
@@ -164,7 +156,6 @@ jobs:
           keys:
             - maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
             - maven-dependency-cache-versioned-
-      - *restore-build-binaries-cache
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
