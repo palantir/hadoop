@@ -26,7 +26,7 @@ step_templates:
   restore-build-binaries-cache: &restore-build-binaries-cache
     restore_cache:
       keys:
-        - build-binaries-{{ checksum "build/mvn" }}
+        - build-binaries-{{ checksum "mvn" }}
         - build-binaries-
   restore-maven-dependency-cache: &restore-maven-dependency-cache
     restore_cache:
@@ -101,13 +101,13 @@ jobs:
       - *checkout-code
       - *restore-maven-dependency-cache
       - *restore-build-binaries-cache
-      - run: ./build/mvn -T1C -B -DskipTests install
+      - run: mvn -T1C -B -DskipTests install
       - persist_to_workspace:
           root: .
           paths:
             - '*/target'
       - save_cache:
-          key: build-binaries-{{ checksum "build/mvn" }}
+          key: build-binaries-{{ checksum "mvn" }}
           paths:
             - "build"
       - save_cache:
@@ -126,7 +126,7 @@ jobs:
       - *restore-build-binaries-cache
       - run:
           name: Run all tests
-          command: ./build/mvn test
+          command: mvn test
           no_output_timeout: 15m
       - run:
           name: Save test results
@@ -171,7 +171,7 @@ jobs:
       - run: echo "host=api.bintray.com" >> .credentials
       - deploy:
           name: Deploy all the things
-          command: ./build/mvn -T1C --settings $tmp_settings -DskipTests deploy
+          command: mvn -T1C --settings $tmp_settings -DskipTests deploy
 
 workflows:
   version: 2
