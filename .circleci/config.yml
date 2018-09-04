@@ -151,7 +151,11 @@ jobs:
       - *checkout-code
       - *restore-maven-dependency-cache
       - run:
-          command: dev/set_version_and_package.sh
+          command: |
+            version=$(git describe --tags --first-parent)
+            mvn versions:set -DnewVersion="$version"
+            mvn -T1C -DskipTests package
+            mvn package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
       - persist_to_workspace:
           root: .
           paths:
