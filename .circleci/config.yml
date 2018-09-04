@@ -101,10 +101,6 @@ jobs:
           paths:
             - '*/target'
       - save_cache:
-          key: build-binaries-{{ checksum "mvn" }}
-          paths:
-            - "build"
-      - save_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
           paths:
             - "~/.m2"
