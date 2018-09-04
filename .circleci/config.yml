@@ -121,7 +121,7 @@ jobs:
       - run:
           name: Run all tests
           command: |
-	    case $CIRCLE_NODE_INDEX in
+            case $CIRCLE_NODE_INDEX in
               0)
                 cd hadoop-common-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
                 ;;
