@@ -100,7 +100,7 @@ RUN groupadd --gid 3434 circleci \
 SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
 
 # INSTALL PROTOC
-RUN curl -LO "https://publish.artifactory.palantir.build/artifactory/internal-dist-thirdparty/google/protoc/v2.5.0/protobuf-2.5.0.tar.bz2" \
+RUN curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v2.5.0/protobuf-2.5.0.tar.bz2" \
   && tar -xf protobuf-*.tar.bz2 \
   && cd protobuf-2.5.0 \
   && ./configure \
