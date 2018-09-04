@@ -101,17 +101,17 @@ SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
 
 # INSTALL PROTOC
 RUN curl -LO "https://publish.artifactory.palantir.build/artifactory/internal-dist-thirdparty/google/protoc/v2.5.0/protobuf-2.5.0.tar.bz2" \
-  && tar -xf protobuf-*.tar.bz2
-  && cd $PROTOBUF_PACKAGE_NAME
-  && ./configure
-  && make --silent install
-  && ldconfig
+  && tar -xf protobuf-*.tar.bz2 \
+  && cd protobuf-2.5.0 \
+  && ./configure \
+  && make --silent install \
+  && ldconfig \
   && protoc --version
 
 # INSTALL MAVEN
-RUN wget http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz
-  && tar xfz apache-maven-3.5.4-bin.tar.gz -C /usr/local/
-  && sudo ln -sf /usr/local/apache-maven-3.5.4/bin/mvn /usr/local/apache-maven/bin/mvn
+RUN wget http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz \
+  && tar xfz apache-maven-3.5.4-bin.tar.gz  \
+  && ln -sf "$PWD/apache-maven-3.5.4/bin/mvn" /usr/bin/mvn \
   && mvn --version
 
 # USER SPECIFIC INSTALLS
