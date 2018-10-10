@@ -100,13 +100,15 @@ RUN groupadd --gid 3434 circleci \
 SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
 
 # INSTALL PROTOC
-RUN curl -LO "https://publish.artifactory.palantir.build/artifactory/internal-dist-thirdparty/google/protoc/v2.5.0/protobuf-2.5.0.tar.bz2" \
+RUN curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v2.5.0/protobuf-2.5.0.tar.bz2" \
   && tar -xf protobuf-*.tar.bz2 \
   && cd protobuf-2.5.0 \
   && ./configure \
   && make --silent install \
   && ldconfig \
-  && protoc --version
+  && protoc --version \
+  && cd .. \
+  && chown -R circleci protobuf-2.5.0
 
 # INSTALL MAVEN
 RUN wget http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven-3.5.4-bin.tar.gz \
