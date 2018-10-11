@@ -33,12 +33,11 @@ RUN mkdir -p /usr/share/man/man1 \
     net-tools netcat unzip zip bzip2 gnupg curl wget \
     openjdk-8-jdk rsync \
     libboost-dev libboost-test-dev libboost-program-options-dev \
-    flex bison pkg-config \
+    flex bison pkg-config cmake \
   && rm -rf /var/lib/apt/lists/*
 
 # If you update java, make sure this aligns
 ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
-
 
 # Set timezone to UTC by default
 RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
