@@ -96,10 +96,6 @@ jobs:
       - *checkout-code
       - *restore-maven-dependency-cache
       - run: mvn -T1C -B -DskipTests install
-      - persist_to_workspace:
-          root: .
-          paths:
-            - '*/target'
       - save_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
           paths:
@@ -157,10 +153,6 @@ jobs:
             mvn versions:set -DnewVersion="$version"
             mvn -T1C -DskipTests package
             mvn package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
-      - persist_to_workspace:
-          root: .
-          paths:
-            - '*/target'
       - save_cache:
           key: maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
           paths: ~/.m2
