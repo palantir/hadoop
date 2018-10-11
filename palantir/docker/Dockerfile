@@ -39,7 +39,6 @@ RUN mkdir -p /usr/share/man/man1 \
 # If you update java, make sure this aligns
 ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
 
-
 # Set timezone to UTC by default
 RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
 
@@ -115,6 +114,14 @@ RUN wget http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven
   && tar xfz apache-maven-3.5.4-bin.tar.gz  \
   && ln -sf "$PWD/apache-maven-3.5.4/bin/mvn" /usr/bin/mvn \
   && mvn --version
+
+# INSTALL CMAKE
+RUN curl -LO http://www.cmake.org/files/v3.1/cmake-3.1.3.tar.gz \
+  && tar xfz cmake-*.tar.gz && rm *.tar.gz
+  && ./cmake-3.1.3/bootstrap
+  && make --silent
+  && sudo make --silent install
+  && export PATH="$PATH:`pwd`"
 
 # USER SPECIFIC INSTALLS
 
