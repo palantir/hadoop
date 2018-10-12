@@ -154,18 +154,19 @@ jobs:
             mvn -T1C -DskipTests package
             mvn package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
       - save_cache:
-          key: maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
+          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
+          paths: .
+      - save_cache:
+          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
           paths: ~/.m2
 
   deploy:
     <<: *defaults
     steps:
-      - attach_workspace:
-          at: .
       - restore_cache:
-          keys:
-            - maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
-            - maven-dependency-cache-versioned-
+          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
+      - restore_cache:
+          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
