@@ -171,9 +171,13 @@ jobs:
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
       - run: echo "host=api.bintray.com" >> .credentials
+      - run: echo "<settings><servers><server>" > tmp-settings.xml
+      - run: echo "<id>bintray-palantir-release</id><username>$BINTRAY_USERNAME</username>" >> tmp-settings.xml
+      - run: echo "<password>$BINTRAY_PASSWORD</password>" >> tmp-settings.xml
+      - run: echo "</server></servers></settings>" >> tmp-settings.xml
       - deploy:
           name: Deploy all the things
-          command: mvn -T1C --settings $tmp_settings -DskipTests deploy
+          command: mvn -T1C --settings tmp-settings.xml -DskipTests deploy
 
 workflows:
   version: 2
