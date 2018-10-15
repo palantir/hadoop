@@ -145,6 +145,10 @@ jobs:
   deploy:
     <<: *defaults
     steps:
+      - *checkout-code
+      - attach_workspace:
+          at: .
+      - *restore-maven-dependency-cache
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
