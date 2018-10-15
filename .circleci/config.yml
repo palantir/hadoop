@@ -142,42 +142,15 @@ jobs:
       - store_artifacts:
           path: ~/junit
 
-  build-maven-versioned:
-    <<: *defaults
-    steps:
-      - *checkout-code
-      - *restore-maven-dependency-cache
-      - run:
-          command: |
-            version=$(git describe --tags --first-parent)
-            mvn versions:set -DnewVersion="$version"
-            mvn -T1C -DskipTests package
-            mvn package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
-      - save_cache:
-          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
-          paths: .
-      - save_cache:
-          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
-          paths: ~/.m2
-
   deploy:
     <<: *defaults
     steps:
-      - restore_cache:
-          key: v1-maven-build-with-version-{{ .Branch }}-{{ .Revision }}
-      - restore_cache:
-          key: v1-maven-dependency-cache-versioned-{{ checksum "pom.xml" }}
       - run: echo "user=$BINTRAY_USERNAME" > .credentials
       - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
       - run: echo "realm=Bintray API Realm" >> .credentials
       - run: echo "host=api.bintray.com" >> .credentials
-      - run: echo "<settings><servers><server>" > tmp-settings.xml
-      - run: echo "<id>bintray-palantir-release</id><username>$BINTRAY_USERNAME</username>" >> tmp-settings.xml
-      - run: echo "<password>$BINTRAY_PASSWORD</password>" >> tmp-settings.xml
-      - run: echo "</server></servers></settings>" >> tmp-settings.xml
       - deploy:
-          name: Deploy all the things
-          command: mvn -T1C --settings tmp-settings.xml -DskipTests deploy
+          command: palantir/publish.sh
 
 workflows:
   version: 2
@@ -189,10 +162,7 @@ workflows:
           requires:
             - build-maven
           <<: *all-branches-and-tags
-      - build-maven-versioned:
-          <<: *deployable-branches-and-tags
       - deploy:
           requires:
             - run-tests
-            - build-maven-versioned
           <<: *deployable-branches-and-tags
