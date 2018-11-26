@@ -1138,9 +1138,9 @@ public class S3AFileSystem extends FileSystem {
     } catch (MultiObjectDeleteException e) {
       // one or more of the operations failed.
       List<MultiObjectDeleteException.DeleteError> errors = e.getErrors();
-      LOG.error("Partial failure of delete, {} errors", errors.size(), e);
+      LOG.debug("Partial failure of delete, {} errors", errors.size(), e);
       for (MultiObjectDeleteException.DeleteError error : errors) {
-        LOG.error("{}: \"{}\" - {}",
+        LOG.debug("{}: \"{}\" - {}",
             error.getKey(), error.getCode(), error.getMessage());
       }
       throw e;
