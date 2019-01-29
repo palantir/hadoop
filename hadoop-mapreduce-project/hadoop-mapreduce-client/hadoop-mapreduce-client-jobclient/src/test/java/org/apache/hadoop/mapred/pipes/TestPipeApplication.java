@@ -64,10 +64,12 @@ import org.apache.hadoop.util.ExitUtil;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
 
+@Ignore
 public class TestPipeApplication {
   private static File workSpace = new File("target",
           TestPipeApplication.class.getName() + "-workSpace");
