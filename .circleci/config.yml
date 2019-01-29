@@ -1,0 +1,172 @@
+version: 2
+
+defaults: &defaults
+  docker:
+    - image: palantirtechnologies/circle-hadoop-3
+  resource_class: xlarge
+  environment: &defaults-environment
+    TERM: dumb
+
+all-branches-and-tags: &all-branches-and-tags
+  filters:
+    # run on all branches and tags
+    tags:
+      only: /.*/
+
+deployable-branches-and-tags: &deployable-branches-and-tags
+  filters:
+    tags:
+      only: /[0-9]+(?:\.[0-9]+){2,}-palantir\.[0-9]+(?:\.[0-9]+)*/
+    branches:
+      only: master
+
+# Step templates
+
+step_templates:
+  restore-maven-dependency-cache: &restore-maven-dependency-cache
+    restore_cache:
+      keys:
+        - maven-dependency-cache-{{ checksum "pom.xml" }}
+        # Fallback - see https://circleci.com/docs/2.0/configuration-reference/#example-2
+        - maven-dependency-cache-
+  checkout-code: &checkout-code
+    run:
+      name: Checkout code
+      command: |
+        # Copy of circle's checkout command with fix for fetching tags from
+        # https://discuss.circleci.com/t/fetching-circle-tag-doesnt-seem-to-work/19014/2
+
+        # Workaround old docker images with incorrect $HOME
+        # check https://github.com/docker/docker/issues/2968 for details
+        if [ "${HOME}" = "/" ]
+        then
+          export HOME=$(getent passwd $(id -un) | cut -d: -f6)
+        fi
+
+        mkdir -p ~/.ssh
+
+        echo 'github.com ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAq2A7hRGmdnm9tUDbO9IDSwBK6TbQa+PXYPCPy6rbTrTtw7PHkccKrpp0yVhp5HdEIcKr6pLlVDBfOLX9QUsyCOV0wzfjIJNlGEYsdlLJizHhbn2mUjvSAHQqZETYP81eFzLQNnPHt4EVVUh7VfDESU84KezmD5QlWpXLmvU31/yMf+Se8xhHTvKSCZIFImWwoG6mbUoWf9nzpIoaSjB+weqqUUmpaaasXVal72J+UX2B+2RPW3RcT0eOzQgqlJL3RKrTJvdsjE3JEAvGq3lGHSZXy28G3skua2SmVi/w4yCE6gbODqnTWlg7+wC604ydGXA8VJiS5ap43JXiUFFAaQ==
+        bitbucket.org ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEAubiN81eDcafrgMeLzaFPsw2kNvEcqTKl/VqLat/MaB33pZy0y3rJZtnqwR2qOOvbwKZYKiEO1O6VqNEBxKvJJelCq0dTXWT5pbO2gDXC6h6QDXCaHo6pOHGPUy+YBaGQRGuSusMEASYiWunYN0vCAI8QaXnWMXNMdFP3jHAJH0eDsoiGnLPBlBp4TNm6rYI74nMzgz3B9IikW4WVK+dc8KZJZWYjAuORU3jc1c/NPskD2ASinf8v3xnfXeukU0sJ5N6m5E8VLjObPEO+mN2t/FZTMZLiFqPWc/ALSqnMnnhwrNi2rbfg/rd/IpL8Le3pSBne8+seeFVBoGqzHM9yXw==
+        ' >> ~/.ssh/known_hosts
+
+        (umask 077; touch ~/.ssh/id_rsa)
+        chmod 0600 ~/.ssh/id_rsa
+        (cat <<EOF > ~/.ssh/id_rsa
+        $CHECKOUT_KEY
+        EOF
+        )
+
+        # use git+ssh instead of https
+        git config --global url."ssh://git@github.com".insteadOf "https://github.com" || true
+
+        if [ -e /home/circleci/project/.git ]
+        then
+          cd /home/circleci/project
+          git remote set-url origin "$CIRCLE_REPOSITORY_URL" || true
+        else
+          mkdir -p /home/circleci/project
+          cd /home/circleci/project
+          git clone "$CIRCLE_REPOSITORY_URL" .
+        fi
+
+        if [ -n "$CIRCLE_TAG" ]
+        then
+          git fetch origin "+refs/tags/${CIRCLE_TAG}:refs/tags/${CIRCLE_TAG}"
+        else
+          git fetch origin "+${CIRCLE_BRANCH}:remotes/origin/${CIRCLE_BRANCH}"
+        fi
+
+
+        if [ -n "$CIRCLE_TAG" ]
+        then
+          git reset --hard "$CIRCLE_SHA1"
+          git checkout -q "$CIRCLE_TAG"
+        elif [ -n "$CIRCLE_BRANCH" ]
+        then
+          git reset --hard "$CIRCLE_SHA1"
+          git checkout -q -B "$CIRCLE_BRANCH"
+        fi
+
+        git reset --hard "$CIRCLE_SHA1"
+
+jobs:
+  build-maven:
+    <<: *defaults
+    steps:
+      - *checkout-code
+      - *restore-maven-dependency-cache
+      - run: mvn -T1C -B -DskipTests install
+      - save_cache:
+          key: maven-dependency-cache-{{ checksum "pom.xml" }}
+          paths:
+            - "~/.m2"
+
+  run-tests:
+    <<: *defaults
+    resource_class: xlarge
+    parallelism: 5
+    steps:
+      - *checkout-code
+      - attach_workspace:
+          at: .
+      - *restore-maven-dependency-cache
+      - run:
+          name: Run all tests
+          command: |
+            case $CIRCLE_NODE_INDEX in
+              0)
+                cd hadoop-common-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+                ;;
+              1)
+                cd hadoop-hdfs-project && mvn test --fail-never -pl '!hadoop-hdfs' | grep -v "ignoring option MaxPermSize"
+                ;;
+              2)
+                cd hadoop-mapreduce-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+                ;;
+              3)
+                cd hadoop-tools && mvn test --fail-never -pl '!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
+                ;;
+              4)
+                cd hadoop-yarn-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+                ;;
+            esac
+          no_output_timeout: 15m
+      - run:
+          name: Save test results
+          command: |
+            mkdir -p ~/junit/
+            find . -type f -regex ".*/target/surefire-reports/.*xml" -exec cp {} ~/junit/ \;
+          when: always
+      - store_test_results:
+          path: ~/junit
+      - store_artifacts:
+          path: ~/junit
+
+  deploy:
+    <<: *defaults
+    steps:
+      - *checkout-code
+      - attach_workspace:
+          at: .
+      - *restore-maven-dependency-cache
+      - run: echo "user=$BINTRAY_USERNAME" > .credentials
+      - run: echo "password=$BINTRAY_PASSWORD" >> .credentials
+      - run: echo "realm=Bintray API Realm" >> .credentials
+      - run: echo "host=api.bintray.com" >> .credentials
+      - deploy:
+          command: palantir/publish.sh
+
+workflows:
+  version: 2
+  build-test-deploy:
+    jobs:
+      - build-maven:
+          <<: *all-branches-and-tags
+      - run-tests:
+          requires:
+            - build-maven
+          <<: *all-branches-and-tags
+      - deploy:
+          requires:
+            - run-tests
+          <<: *deployable-branches-and-tags
