@@ -1,5 +1,7 @@
 # 3.2.0-palantir.1
 
-Identical to Apache Hadoop tag `release-3.2.0-RC1`.
+Based on Apache Hadoop tag `release-3.2.0-RC1`.
+
+* Backport [HADOOP-15974](https://issues.apache.org/jira/browse/HADOOP-15974)
 
 
