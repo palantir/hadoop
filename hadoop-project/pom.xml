@@ -1869,11 +1869,6 @@
               <fork>true</fork>
               <source>${javac.version}</source>
               <target>${javac.version}</target>
-              <compilerArguments>
-                <Xlint/>
-				<Xlint:-unchecked/>
-                <Xmaxwarns>9999</Xmaxwarns>
-              </compilerArguments>
             </configuration>
           </plugin>
         </plugins>
@@ -1948,7 +1943,7 @@
         <dependencies>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>${hbase-server-artifactid}</artifactId>
+            <artifactId>hadoop-yarn-server-timelineservice-hbase-server-1</artifactId>
             <version>${hadoop.version}</version>
           </dependency>
         </dependencies>
@@ -1975,7 +1970,7 @@
         <dependencies>
           <dependency>
             <groupId>org.apache.hadoop</groupId>
-            <artifactId>${hbase-server-artifactid}</artifactId>
+            <artifactId>hadoop-yarn-server-timelineservice-hbase-server-2</artifactId>
             <version>${hadoop.version}</version>
           </dependency>
         </dependencies>
