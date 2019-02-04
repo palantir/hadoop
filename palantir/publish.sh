@@ -10,13 +10,13 @@ echo "<id>bintray-palantir-release</id><username>$BINTRAY_USERNAME</username>" >
 echo "<password>$BINTRAY_PASSWORD</password>" >> $tmp_settings
 echo "</server></servers></settings>" >> $tmp_settings
 
-# Deploy JARs to Bintray
+# Update the version.
 mvn -e versions:set -DnewVersion="$version"
-mvn -e --settings $tmp_settings source:jar -DskipTests deploy
-
-# Update $hadoop.version in the pom
 echo $PWD
 sed -i '' "s/\<hadoop\.version>3\.2\.0/\<hadoop\.version\>$version/g" pom.xml
+
+# Deploy JARs to Bintray
+mvn -e --settings $tmp_settings source:jar -DskipTests deploy
 
 # Publish a dist to Bintray
 mvn -e package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
