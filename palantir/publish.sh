@@ -14,6 +14,10 @@ echo "</server></servers></settings>" >> $tmp_settings
 mvn -e versions:set -DnewVersion="$version"
 mvn -e --settings $tmp_settings source:jar -DskipTests deploy
 
+# Update $hadoop.version in the pom
+echo $PWD
+sed -i '' "s/\<hadoop\.version>3\.2\.0/\<hadoop\.version\>$version/g" pom.xml
+
 # Publish a dist to Bintray
 mvn -e package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar
 curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T hadoop-dist/target/hadoop-${version}.tar.gz "https://api.bintray.com/content/palantir/releases/hadoop/${version}/org/apache/hadoop/hadoop-dist/${version}/${file_name}"
