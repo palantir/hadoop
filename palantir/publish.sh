@@ -13,7 +13,7 @@ echo "</server></servers></settings>" >> $tmp_settings
 # Update the version.
 mvn -e versions:set -DnewVersion="$version"
 echo $PWD
-sed -i '' "s/\<hadoop\.version>3\.2\.0/\<hadoop\.version\>$version/g" pom.xml
+sed -i "s/\<hadoop\.version>3\.2\.0/\<hadoop\.version\>$version/g" pom.xml
 
 # Deploy JARs to Bintray
 mvn -e --settings $tmp_settings source:jar -DskipTests deploy
