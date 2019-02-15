@@ -33,7 +33,7 @@ RUN mkdir -p /usr/share/man/man1 \
     net-tools netcat unzip zip bzip2 gnupg curl wget \
     openjdk-8-jdk rsync \
     libboost-dev libboost-test-dev libboost-program-options-dev \
-    flex bison pkg-config cmake \
+    flex bison pkg-config cmake libsasl2-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # If you update java, make sure this aligns
