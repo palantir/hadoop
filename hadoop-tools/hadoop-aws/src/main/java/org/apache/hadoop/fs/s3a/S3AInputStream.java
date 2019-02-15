@@ -32,11 +32,13 @@ import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileSystem;
 
+import org.apache.hadoop.fs.s3a.multipart.MultipartDownloader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 
 import static org.apache.commons.lang.StringUtils.isNotEmpty;
 import static org.apache.hadoop.fs.s3a.S3AUtils.*;
@@ -72,7 +74,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
    * set
    */
   private volatile boolean closed;
-  private S3ObjectInputStream wrappedStream;
+  private InputStream wrappedStream;
   private final FileSystem.Statistics stats;
   private final AmazonS3 client;
   private final String bucket;
@@ -151,6 +153,9 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
 
     streamStatistics.streamOpened();
     try {
+      MultipartDownloader multipartDownloader = new MultipartDownloader(null, null, null, null, null);
+      wrappedStream = multipartDownloader.download(bucket, key, targetPos, contentRangeFinish - 1);
+
       GetObjectRequest request = new GetObjectRequest(bucket, key)
           .withRange(targetPos, contentRangeFinish - 1);
       if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) &&
