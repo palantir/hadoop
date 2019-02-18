@@ -18,103 +18,48 @@
 
 package org.apache.hadoop.fs.s3a;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InterruptedIOException;
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Objects;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.event.ProgressEvent;
+import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AbortMultipartUploadRequest;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadRequest;
-import com.amazonaws.services.s3.model.CompleteMultipartUploadResult;
-import com.amazonaws.services.s3.model.CopyObjectRequest;
-import com.amazonaws.services.s3.model.DeleteObjectsRequest;
-import com.amazonaws.services.s3.model.GetObjectMetadataRequest;
-import com.amazonaws.services.s3.model.InitiateMultipartUploadRequest;
-import com.amazonaws.services.s3.model.ListObjectsRequest;
-import com.amazonaws.services.s3.model.MultiObjectDeleteException;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.PartETag;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectResult;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.amazonaws.services.s3.model.SSEAwsKeyManagementParams;
-import com.amazonaws.services.s3.model.SSECustomerKey;
-import com.amazonaws.services.s3.model.UploadPartRequest;
-import com.amazonaws.services.s3.model.UploadPartResult;
+import com.amazonaws.services.s3.model.*;
 import com.amazonaws.services.s3.transfer.Copy;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerConfiguration;
 import com.amazonaws.services.s3.transfer.Upload;
-import com.amazonaws.event.ProgressListener;
-import com.amazonaws.event.ProgressEvent;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListeningExecutorService;
-
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CreateFlag;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FSDataOutputStream;
-import org.apache.hadoop.fs.FileAlreadyExistsException;
-import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.GlobalStorageStatistics;
-import org.apache.hadoop.fs.InvalidRequestException;
-import org.apache.hadoop.fs.LocalDirAllocator;
-import org.apache.hadoop.fs.LocalFileSystem;
-import org.apache.hadoop.fs.LocatedFileStatus;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
-import org.apache.hadoop.fs.PathIOException;
-import org.apache.hadoop.fs.PathIsNotEmptyDirectoryException;
-import org.apache.hadoop.fs.RemoteIterator;
-import org.apache.hadoop.fs.StorageStatistics;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.fs.s3a.s3guard.DirListingMetadata;
-import org.apache.hadoop.fs.s3a.s3guard.MetadataStoreListFilesIterator;
-import org.apache.hadoop.fs.s3a.s3guard.MetadataStore;
-import org.apache.hadoop.fs.s3a.s3guard.PathMetadata;
-import org.apache.hadoop.fs.s3a.s3guard.S3Guard;
+import org.apache.hadoop.fs.s3a.multipart.MultipartDownloader;
+import org.apache.hadoop.fs.s3a.multipart.PartDownloader;
+import org.apache.hadoop.fs.s3a.s3guard.*;
 import org.apache.hadoop.fs.s3native.S3xLoginHelper;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.BlockingThreadPoolExecutorService;
 import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.SemaphoredDelegatingExecutor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.*;
+import java.net.URI;
+import java.util.*;
+import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.Listing.ACCEPT_ALL;
 import static org.apache.hadoop.fs.s3a.S3AUtils.*;
 import static org.apache.hadoop.fs.s3a.Statistic.*;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * The core S3A Filesystem implementation.
@@ -169,6 +114,8 @@ public class S3AFileSystem extends FileSystem {
   private String blockOutputBuffer;
   private S3ADataBlocks.BlockFactory blockFactory;
   private int blockOutputActiveBlocks;
+
+  private MultipartDownloader multipartDownloader;
 
   /** Add any deprecated keys. */
   @SuppressWarnings("deprecation")
@@ -298,6 +245,13 @@ public class S3AFileSystem extends FileSystem {
         LOG.debug("Using metadata store {}, authoritative={}",
             getMetadataStore(), allowAuthoritative);
       }
+
+      multipartDownloader = new MultipartDownloader(8000000, Executors.newFixedThreadPool(8), new PartDownloader() {
+        @Override
+        public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
+          return s3.getObject(new GetObjectRequest("multiparttesting", "big-file.txt").withRange(rangeStart, rangeEnd - 1));
+        }
+      }, 24000);
     } catch (AmazonClientException e) {
       throw translateException("initializing ", new Path(name), e);
     }
@@ -599,7 +553,7 @@ public class S3AFileSystem extends FileSystem {
             statistics,
             instrumentation,
             readAhead,
-            inputPolicy));
+            inputPolicy, multipartDownloader));
   }
 
   /**

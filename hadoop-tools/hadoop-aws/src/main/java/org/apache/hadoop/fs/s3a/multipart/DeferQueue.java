@@ -15,14 +15,15 @@ public final class DeferQueue {
     public synchronized void addWriteAndRequestAvailable(long offset, byte[] data) {
         pendingWrites.add(Pair.of(offset, data));
 
-        while (pendingWrites.peek().getLeft().equals(nextOffset)) {
+        Pair<Long, byte[]> peek;
+        while (((peek = pendingWrites.peek()) != null) && peek.getLeft().equals(nextOffset)) {
             byte[] bytes = pendingWrites.poll().getRight();
             availableWrites.add(bytes);
             nextOffset += bytes.length;
         }
     }
 
-    public synchronized byte[] popAvailableWrite() {
+    public byte[] popAvailableWrite() {
         try {
             return availableWrites.take();
         } catch (InterruptedException e) {

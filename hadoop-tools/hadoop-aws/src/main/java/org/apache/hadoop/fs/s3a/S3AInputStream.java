@@ -20,18 +20,13 @@ package org.apache.hadoop.fs.s3a;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.S3ObjectInputStream;
-import com.amazonaws.services.s3.model.SSECustomerKey;
 import com.google.common.base.Preconditions;
-import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.fs.CanSetReadahead;
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileSystem;
-
 import org.apache.hadoop.fs.s3a.multipart.MultipartDownloader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,7 +36,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 import static org.apache.commons.lang.StringUtils.isNotEmpty;
-import static org.apache.hadoop.fs.s3a.S3AUtils.*;
+import static org.apache.hadoop.fs.s3a.S3AUtils.translateException;
 
 /**
  * The input stream for an S3A object.
@@ -106,13 +101,16 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
    */
   private long contentRangeStart;
 
+  private MultipartDownloader multipartDownloader;
+
   public S3AInputStream(S3ObjectAttributes s3Attributes,
-      long contentLength,
-      AmazonS3 client,
-      FileSystem.Statistics stats,
-      S3AInstrumentation instrumentation,
-      long readahead,
-      S3AInputPolicy inputPolicy) {
+                        long contentLength,
+                        AmazonS3 client,
+                        FileSystem.Statistics stats,
+                        S3AInstrumentation instrumentation,
+                        long readahead,
+                        S3AInputPolicy inputPolicy, MultipartDownloader multipartDownloader) {
+    this.multipartDownloader = multipartDownloader;
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getBucket()), "No Bucket");
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getKey()), "No Key");
     Preconditions.checkArgument(contentLength >= 0, "Negative content length");
@@ -153,16 +151,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
 
     streamStatistics.streamOpened();
     try {
-      MultipartDownloader multipartDownloader = new MultipartDownloader(null, null, null, null, null);
       wrappedStream = multipartDownloader.download(bucket, key, targetPos, contentRangeFinish - 1);
-
-      GetObjectRequest request = new GetObjectRequest(bucket, key)
-          .withRange(targetPos, contentRangeFinish - 1);
-      if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) &&
-          StringUtils.isNotBlank(serverSideEncryptionKey)){
-        request.setSSECustomerKey(new SSECustomerKey(serverSideEncryptionKey));
-      }
-      wrappedStream = client.getObject(request).getObjectContent();
       contentRangeStart = targetPos;
       if (wrappedStream == null) {
         throw new IOException("Null IO stream from reopen of (" + reason +  ") "
@@ -489,7 +478,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
         // Abort, rather than just close, the underlying stream.  Otherwise, the
         // remaining object payload is read from S3 while closing the stream.
         LOG.debug("Aborting stream");
-        wrappedStream.abort();
+//        wrappedStream.abort();
         streamStatistics.streamClose(true, remaining);
       }
       LOG.debug("Stream {} {}: {}; remaining={} streamPos={},"
