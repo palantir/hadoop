@@ -7,6 +7,8 @@ import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.thirdparty.apache.http.conn.socket.ConnectionSocketFactory;
 import com.amazonaws.thirdparty.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 
 import javax.net.ssl.SSLContext;
 import java.io.IOException;
@@ -22,6 +24,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MultipartDownloader {
+    private static final Log LOG = LogFactory.getLog(MultipartDownloader.class);
 
     private final int partSize;
     private final ExecutorService downloadExecutorService;
@@ -48,6 +51,7 @@ public class MultipartDownloader {
             downloadExecutorService.submit(new Runnable() {
                 @Override
                 public void run() {
+                    LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
                     try (S3Object s3Object = partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd); InputStream inputStream = s3Object.getObjectContent()) {
                         long currentOffset = partRangeStart;
                         byte[] chunk;
@@ -57,7 +61,7 @@ public class MultipartDownloader {
                             currentOffset += chunk.length;
                         }
                     } catch (Throwable e) {
-                        e.printStackTrace();
+                        LOG.info("Exception caught while downloading part", e);
                     }
                 }
             });
@@ -74,22 +78,26 @@ public class MultipartDownloader {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                long writtenBytes = 0;
-                while (writtenBytes < size) {
-                    System.out.println(writtenBytes);
-                    byte[] bytes = deferQueue.popAvailableWrite();
+                try {
+                    long writtenBytes = 0;
+                    while (writtenBytes < size) {
+                        LOG.info("Writing out bytes for offset " + writtenBytes);
+                        byte[] bytes = deferQueue.popAvailableWrite();
+                        try {
+                            pipedOutputStream.write(bytes);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+
+                        writtenBytes += bytes.length;
+                    }
                     try {
-                        pipedOutputStream.write(bytes);
+                        pipedOutputStream.close();
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     }
-
-                    writtenBytes += bytes.length;
-                }
-                try {
-                    pipedOutputStream.close();
-                } catch (IOException e) {
-                    e.printStackTrace();
+                } catch (Throwable e) {
+                    LOG.info("Exception caught while writing part", e);
                 }
             }
         }).start();
