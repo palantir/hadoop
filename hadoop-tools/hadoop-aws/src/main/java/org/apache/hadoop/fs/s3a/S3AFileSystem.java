@@ -31,6 +31,7 @@ import com.amazonaws.services.s3.transfer.Upload;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -246,7 +247,8 @@ public class S3AFileSystem extends FileSystem {
             getMetadataStore(), allowAuthoritative);
       }
 
-      multipartDownloader = new MultipartDownloader(8000000, Executors.newFixedThreadPool(8), new PartDownloader() {
+      ExecutorService downloadExecutorService = Executors.newFixedThreadPool(8, new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
+      multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, new PartDownloader() {
         @Override
         public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
           String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());

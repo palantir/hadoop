@@ -151,7 +151,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
 
     streamStatistics.streamOpened();
     try {
-      wrappedStream = multipartDownloader.download(bucket, key, targetPos, contentRangeFinish - 1);
+      wrappedStream = multipartDownloader.download(bucket, key, targetPos, contentRangeFinish);
       contentRangeStart = targetPos;
       if (wrappedStream == null) {
         throw new IOException("Null IO stream from reopen of (" + reason +  ") "

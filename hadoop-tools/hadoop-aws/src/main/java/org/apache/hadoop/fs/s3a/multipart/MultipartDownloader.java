@@ -155,7 +155,7 @@ public class MultipartDownloader {
             }
         }, 256000);
 
-        InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 100, 200);
+        InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 100, 101);
         Files.copy(inputStream, Paths.get("/Users/juang/Desktop/fairscheduler.xml"), StandardCopyOption.REPLACE_EXISTING);
         downloadExecutorService.shutdown();
     }
