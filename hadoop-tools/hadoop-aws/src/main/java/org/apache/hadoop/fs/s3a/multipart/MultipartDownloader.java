@@ -143,7 +143,7 @@ public class MultipartDownloader {
         MultipartDownloader multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, new PartDownloader() {
             @Override
             public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
-                return amazonS3.getObject(new GetObjectRequest("multiparttesting", "big-file.txt").withRange(rangeStart, rangeEnd - 1));
+                return amazonS3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
             }
         }, 256000);
 

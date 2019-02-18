@@ -249,7 +249,7 @@ public class S3AFileSystem extends FileSystem {
       multipartDownloader = new MultipartDownloader(8000000, Executors.newFixedThreadPool(8), new PartDownloader() {
         @Override
         public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
-          return s3.getObject(new GetObjectRequest("multiparttesting", "big-file.txt").withRange(rangeStart, rangeEnd - 1));
+          return s3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
         }
       }, 24000);
     } catch (AmazonClientException e) {
