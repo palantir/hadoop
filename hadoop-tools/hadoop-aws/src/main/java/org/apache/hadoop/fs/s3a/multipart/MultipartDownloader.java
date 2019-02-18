@@ -42,7 +42,7 @@ public class MultipartDownloader {
         final long size = rangeEnd - rangeStart;
         int numParts = (int) Math.ceil((double) size / partSize);
 
-        final DeferQueue deferQueue = new DeferQueue();
+        final DeferQueue deferQueue = new DeferQueue(rangeStart);
 
         for (int i = 0; i < numParts; i++) {
             final long partRangeStart = rangeStart + i * partSize;
@@ -155,8 +155,8 @@ public class MultipartDownloader {
             }
         }, 256000);
 
-        InputStream inputStream = multipartDownloader.download("multiparttesting", "big-file.txt", 0, 438888890);
-        Files.copy(inputStream, Paths.get("/Users/juang/Desktop/big-file-downloaded.txt"), StandardCopyOption.REPLACE_EXISTING);
+        InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 100, 200);
+        Files.copy(inputStream, Paths.get("/Users/juang/Desktop/fairscheduler.xml"), StandardCopyOption.REPLACE_EXISTING);
         downloadExecutorService.shutdown();
     }
 }

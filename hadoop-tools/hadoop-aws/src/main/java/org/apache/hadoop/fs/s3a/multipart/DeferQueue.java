@@ -10,7 +10,11 @@ public final class DeferQueue {
 
     private final PriorityQueue<Pair<Long, byte[]>> pendingWrites = new PriorityQueue<>();
     private final BlockingQueue<byte[]> availableWrites = new LinkedBlockingQueue<>();
-    private Long nextOffset = 0L;
+    private Long nextOffset;
+
+    public DeferQueue(Long nextOffset) {
+        this.nextOffset = nextOffset;
+    }
 
     public synchronized void addWriteAndRequestAvailable(long offset, byte[] data) {
         pendingWrites.add(Pair.of(offset, data));
