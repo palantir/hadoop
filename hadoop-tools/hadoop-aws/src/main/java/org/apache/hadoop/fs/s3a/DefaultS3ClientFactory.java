@@ -24,7 +24,6 @@ import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.S3ClientOptions;
-import com.amazonaws.thirdparty.apache.http.conn.socket.ConnectionSocketFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.util.VersionInfo;
@@ -63,11 +62,6 @@ public class DefaultS3ClientFactory extends Configured implements
    */
   public static ClientConfiguration createAwsConf(Configuration conf) {
     final ClientConfiguration awsConf = new ClientConfiguration();
-
-    if (conf.get() != null) {
-      awsConf.getApacheHttpClientConfig().setSslSocketFactory(ConnectionSocketFactory);
-    }
-
     initConnectionSettings(conf, awsConf);
     initProxySupport(conf, awsConf);
     initUserAgent(conf, awsConf);
