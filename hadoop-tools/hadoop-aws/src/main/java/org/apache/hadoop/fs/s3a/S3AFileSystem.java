@@ -248,7 +248,8 @@ public class S3AFileSystem extends FileSystem {
       }
 
       ExecutorService downloadExecutorService = Executors.newFixedThreadPool(8, new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
-      multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, new PartDownloader() {
+      ExecutorService writingExecutorService = Executors.newCachedThreadPool();
+      multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, writingExecutorService, new PartDownloader() {
         @Override
         public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
           String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());

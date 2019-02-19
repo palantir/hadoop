@@ -12,8 +12,8 @@ public final class DeferQueue {
     private final BlockingQueue<byte[]> availableWrites = new LinkedBlockingQueue<>();
     private Long nextOffset;
 
-    public DeferQueue(Long nextOffset) {
-        this.nextOffset = nextOffset;
+    public DeferQueue(Long startingOffset) {
+        this.nextOffset = startingOffset;
     }
 
     public synchronized void addWriteAndRequestAvailable(long offset, byte[] data) {

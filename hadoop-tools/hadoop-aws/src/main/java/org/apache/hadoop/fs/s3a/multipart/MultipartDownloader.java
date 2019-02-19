@@ -11,15 +11,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import javax.net.ssl.SSLContext;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.PipedInputStream;
-import java.io.PipedOutputStream;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
-import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -28,12 +24,14 @@ public class MultipartDownloader {
 
     private final int partSize;
     private final ExecutorService downloadExecutorService;
+    private final ExecutorService writingExecutorService;
     private final PartDownloader partDownloader;
     private final int chunkSize;
 
-    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, PartDownloader partDownloader, int chunkSize) {
+    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize) {
         this.partSize = partSize;
         this.downloadExecutorService = downloadExecutorService;
+        this.writingExecutorService = writingExecutorService;
         this.partDownloader = partDownloader;
         this.chunkSize = chunkSize;
     }
@@ -52,16 +50,19 @@ public class MultipartDownloader {
                 @Override
                 public void run() {
                     LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
-                    try (S3Object s3Object = partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd); InputStream inputStream = s3Object.getObjectContent()) {
+                    try (S3Object s3Object = partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd);
+                         DataInputStream inputStream = new DataInputStream(s3Object.getObjectContent())) {
                         long currentOffset = partRangeStart;
-                        byte[] chunk;
 
-                        while ((chunk = readBytesGuaranteed(inputStream, chunkSize)).length > 0) {
+                        while (currentOffset < partRangeEnd) {
+                            int bytesLeft = (int) (partRangeEnd - currentOffset);
+                            byte[] chunk = new byte[bytesLeft > chunkSize ? chunkSize : bytesLeft];
+                            inputStream.readFully(chunk);
                             deferQueue.addWriteAndRequestAvailable(currentOffset, chunk);
                             currentOffset += chunk.length;
                         }
                     } catch (Throwable e) {
-                        LOG.info("Exception caught while downloading part", e);
+                        LOG.error("Exception caught while downloading part", e);
                     }
                 }
             });
@@ -75,13 +76,13 @@ public class MultipartDownloader {
             throw new RuntimeException(e);
         }
 
-        new Thread(new Runnable() {
+        writingExecutorService.submit(new Runnable() {
             @Override
             public void run() {
                 try {
                     long writtenBytes = 0;
                     while (writtenBytes < size) {
-                        LOG.info("Writing out bytes for offset " + writtenBytes);
+                        LOG.debug("Writing out bytes for offset " + writtenBytes);
                         byte[] bytes = deferQueue.popAvailableWrite();
                         try {
                             pipedOutputStream.write(bytes);
@@ -97,43 +98,12 @@ public class MultipartDownloader {
                         throw new RuntimeException(e);
                     }
                 } catch (Throwable e) {
-                    LOG.info("Exception caught while writing part", e);
+                    LOG.error("Exception caught while writing part", e);
                 }
             }
-        }).start();
+        });
 
         return pipedInputStream;
-    }
-
-    public static int read(InputStream in, byte[] b, int off, int len) throws IOException {
-        if (len < 0) {
-            throw new IndexOutOfBoundsException("len is negative");
-        }
-        int total = 0;
-        while (total < len) {
-            int result = in.read(b, off + total, len - total);
-            if (result == -1) {
-                break;
-            }
-            total += result;
-        }
-        return total;
-    }
-
-    private static byte[] readBytesGuaranteed(InputStream is, int numBytes) {
-        byte[] bytes = new byte[numBytes];
-
-        try {
-            int read = read(is, bytes, 0, numBytes);
-
-            if (read != numBytes) {
-                return Arrays.copyOf(bytes, read);
-            }
-
-            return bytes;
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
     }
 
     public static void main(String[] args) throws NoSuchAlgorithmException, IOException {
@@ -148,15 +118,17 @@ public class MultipartDownloader {
                 .build();
 
         ExecutorService downloadExecutorService = Executors.newFixedThreadPool(8);
-        MultipartDownloader multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, new PartDownloader() {
+        ExecutorService writingExecutorService = Executors.newCachedThreadPool();
+        MultipartDownloader multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, writingExecutorService, new PartDownloader() {
             @Override
             public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
                 return amazonS3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
             }
         }, 256000);
 
-        InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 100, 101);
+        InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 0, 101);
         Files.copy(inputStream, Paths.get("/Users/juang/Desktop/fairscheduler.xml"), StandardCopyOption.REPLACE_EXISTING);
         downloadExecutorService.shutdown();
+        writingExecutorService.shutdown();;
     }
 }
