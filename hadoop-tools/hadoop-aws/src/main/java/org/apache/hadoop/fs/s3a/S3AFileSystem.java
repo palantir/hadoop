@@ -259,7 +259,7 @@ public class S3AFileSystem extends FileSystem {
           }
           return s3.getObject(request.withRange(rangeStart, rangeEnd - 1));
         }
-      }, 24000);
+      }, 256000, 400);
     } catch (AmazonClientException e) {
       throw translateException("initializing ", new Path(name), e);
     }

@@ -18,8 +18,9 @@ import java.nio.file.StandardCopyOption;
 import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 
-public class MultipartDownloader {
+public final class MultipartDownloader {
     private static final Log LOG = LogFactory.getLog(MultipartDownloader.class);
 
     private final int partSize;
@@ -27,13 +28,15 @@ public class MultipartDownloader {
     private final ExecutorService writingExecutorService;
     private final PartDownloader partDownloader;
     private final int chunkSize;
+    private final Semaphore semaphore;
 
-    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize) {
+    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize, int concurrentChunks) {
         this.partSize = partSize;
         this.downloadExecutorService = downloadExecutorService;
         this.writingExecutorService = writingExecutorService;
         this.partDownloader = partDownloader;
         this.chunkSize = chunkSize;
+        semaphore = new Semaphore(concurrentChunks);
     }
 
     public InputStream download(final String bucket, final String key, long rangeStart, long rangeEnd) {
@@ -55,6 +58,13 @@ public class MultipartDownloader {
                         long currentOffset = partRangeStart;
 
                         while (currentOffset < partRangeEnd) {
+                            try {
+                                semaphore.acquire();
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                throw new RuntimeException(e);
+                            }
+
                             int bytesLeft = (int) (partRangeEnd - currentOffset);
                             byte[] chunk = new byte[bytesLeft > chunkSize ? chunkSize : bytesLeft];
                             inputStream.readFully(chunk);
@@ -91,6 +101,8 @@ public class MultipartDownloader {
                         }
 
                         writtenBytes += bytes.length;
+
+                        semaphore.release();
                     }
                     try {
                         pipedOutputStream.close();
@@ -124,7 +136,7 @@ public class MultipartDownloader {
             public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
                 return amazonS3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
             }
-        }, 256000);
+        }, 256000, 400);
 
         InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 0, 101);
         Files.copy(inputStream, Paths.get("/Users/juang/Desktop/fairscheduler.xml"), StandardCopyOption.REPLACE_EXISTING);
