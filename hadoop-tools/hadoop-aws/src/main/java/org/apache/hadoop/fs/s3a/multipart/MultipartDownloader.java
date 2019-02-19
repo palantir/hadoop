@@ -30,13 +30,13 @@ public final class MultipartDownloader {
     private final int chunkSize;
     private final Semaphore semaphore;
 
-    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize, int concurrentChunks) {
+    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize, int concurrentParts) {
         this.partSize = partSize;
         this.downloadExecutorService = downloadExecutorService;
         this.writingExecutorService = writingExecutorService;
         this.partDownloader = partDownloader;
         this.chunkSize = chunkSize;
-        semaphore = new Semaphore(concurrentChunks);
+        semaphore = new Semaphore(concurrentParts);
     }
 
     public InputStream download(final String bucket, final String key, long rangeStart, long rangeEnd) {
@@ -138,7 +138,7 @@ public final class MultipartDownloader {
             public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
                 return amazonS3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
             }
-        }, 256000, 400);
+        }, 256000, 16);
 
         InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 0, 101);
         Files.copy(inputStream, Paths.get("/Users/juang/Desktop/fairscheduler.xml"), StandardCopyOption.REPLACE_EXISTING);
