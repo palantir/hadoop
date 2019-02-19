@@ -49,6 +49,13 @@ public final class MultipartDownloader {
             final long partRangeStart = rangeStart + i * partSize;
             final long partRangeEnd = i == numParts - 1 ? rangeEnd : partRangeStart + partSize;
 
+            try {
+                semaphore.acquire();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException(e);
+            }
+
             downloadExecutorService.submit(new Runnable() {
                 @Override
                 public void run() {
@@ -56,15 +63,7 @@ public final class MultipartDownloader {
                     try (S3Object s3Object = partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd);
                          DataInputStream inputStream = new DataInputStream(s3Object.getObjectContent())) {
                         long currentOffset = partRangeStart;
-
                         while (currentOffset < partRangeEnd) {
-                            try {
-                                semaphore.acquire();
-                            } catch (InterruptedException e) {
-                                Thread.currentThread().interrupt();
-                                throw new RuntimeException(e);
-                            }
-
                             int bytesLeft = (int) (partRangeEnd - currentOffset);
                             byte[] chunk = new byte[bytesLeft > chunkSize ? chunkSize : bytesLeft];
                             inputStream.readFully(chunk);
@@ -102,7 +101,10 @@ public final class MultipartDownloader {
 
                         writtenBytes += bytes.length;
 
-                        semaphore.release();
+                        // release every part bytes
+                        if (writtenBytes % partSize == 0 || writtenBytes == size) {
+                            semaphore.release();
+                        }
                     }
                     try {
                         pipedOutputStream.close();
