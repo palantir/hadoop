@@ -1,5 +1,6 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
+import com.amazonaws.services.s3.model.S3Object;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -32,7 +33,7 @@ public final class MultipartDownloader {
         final OrderingQueue orderingQueue = new OrderingQueue(rangeStart, bufferSize);
 
         final PipedOutputStream pipedOutputStream = new PipedOutputStream();
-        PipedInputStream pipedInputStream;
+        final PipedInputStream pipedInputStream;
         try {
             pipedInputStream = new PipedInputStream(pipedOutputStream, chunkSize);
         } catch (IOException e) {
@@ -74,7 +75,8 @@ public final class MultipartDownloader {
                 @Override
                 public void run() {
                     LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
-                    try (DataInputStream inputStream = new DataInputStream(partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd).getObjectContent())) {
+                    try (S3Object s3Object = partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd);
+                         DataInputStream inputStream = new DataInputStream(s3Object.getObjectContent())) {
                         long currentOffset = partRangeStart;
                         while (currentOffset < partRangeEnd) {
                             int bytesLeft = (int) (partRangeEnd - currentOffset);
