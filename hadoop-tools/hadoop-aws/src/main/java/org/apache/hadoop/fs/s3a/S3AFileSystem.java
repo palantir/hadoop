@@ -31,6 +31,7 @@ import com.amazonaws.services.s3.transfer.Upload;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ListeningExecutorService;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -248,8 +249,7 @@ public class S3AFileSystem extends FileSystem {
       }
 
       ExecutorService downloadExecutorService = Executors.newFixedThreadPool(16, new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
-      ExecutorService writingExecutorService = Executors.newCachedThreadPool();
-      multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, writingExecutorService, new PartDownloader() {
+      multipartDownloader = new MultipartDownloader(8000000, MoreExecutors.listeningDecorator(downloadExecutorService), new PartDownloader() {
         @Override
         public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
           String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());
@@ -1197,7 +1197,7 @@ public class S3AFileSystem extends FileSystem {
    * PUT an object directly (i.e. not via the transfer manager).
    * Byte length is calculated from the file length, or, if there is no
    * file, from the content length of the header.
-   * <i>Important: this call will close any input stream in the request.</i>
+   * <i>Important: this call will propagateException any input stream in the request.</i>
    * @param putObjectRequest the request
    * @return the upload initiated
    * @throws AmazonClientException on problems
@@ -1237,7 +1237,7 @@ public class S3AFileSystem extends FileSystem {
   /**
    * Upload part of a multi-partition file.
    * Increments the write and put counters.
-   * <i>Important: this call does not close any input stream in the request.</i>
+   * <i>Important: this call does not propagateException any input stream in the request.</i>
    * @param request request
    * @return the result of the operation.
    * @throws AmazonClientException on problems
