@@ -61,10 +61,6 @@ public final class MultipartDownloader {
                             orderingQueue.push(currentOffset, chunk);
                             currentOffset += chunk.length;
                         }
-
-                        if (partRangeStart == 0) {
-                            throw new RuntimeException("blah");
-                        }
                     } catch (IOException e) {
                         throw new RuntimeException(e);
                     } catch (InterruptedException e) {
