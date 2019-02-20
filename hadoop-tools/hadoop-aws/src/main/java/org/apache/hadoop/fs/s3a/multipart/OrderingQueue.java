@@ -1,74 +1,69 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
-import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.SettableFuture;
 import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.PriorityQueue;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 public final class OrderingQueue {
 
-    private final PriorityQueue<Entry> pendingWrites = new PriorityQueue<>(10, new Comparator<Entry>() {
-        @Override
-        public int compare(Entry o1, Entry o2) {
-            return (int) (o1.getOffset() - o2.getOffset());
-        }
-    });
+    private final PriorityQueue<Pair<Long, byte[]>> pendingWrites = new PriorityQueue<>();
+    private final LinkedList<Pair<Long, byte[]>> availableWrites = new LinkedList<>();
 
-    private final BlockingQueue<Entry> availableWrites = new LinkedBlockingQueue<>();
     private Long nextOffset;
+    private Long readOffset;
+    private final int bufferSize;
 
-    public OrderingQueue(Long startingOffset) {
+    private final Lock lock = new ReentrantLock();
+    private final Condition writeAhead = lock.newCondition();
+    private final Condition availableNotEmpty = lock.newCondition();
+
+    public OrderingQueue(Long startingOffset, int bufferSize) {
         this.nextOffset = startingOffset;
+        this.readOffset = startingOffset;
+        this.bufferSize = bufferSize;
     }
 
-    public synchronized ListenableFuture<?> push(long offset, byte[] data) {
-        SettableFuture<Void> future = SettableFuture.create();
-        pendingWrites.add(new Entry(offset, data, future));
-
-        Entry peek;
-        while (((peek = pendingWrites.peek()) != null) && peek.getOffset() == nextOffset) {
-            availableWrites.add(pendingWrites.poll());
-            nextOffset += peek.getData().length;
-        }
-
-        return future;
-    }
-
-    public Pair<byte[], SettableFuture<Void>> popInOrder() {
+    public void push(long offset, byte[] data) throws InterruptedException {
+        lock.lock();
         try {
-            Entry take = availableWrites.take();
-            return Pair.of(take.getData(), take.getFuture());
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
+            while (offset >= readOffset + bufferSize) {
+                writeAhead.await();
+            }
+
+            pendingWrites.add(Pair.of(offset, data));
+
+            Pair<Long, byte[]> lowestWrite = pendingWrites.peek();
+            while (lowestWrite != null && lowestWrite.getLeft().longValue() == nextOffset) {
+                availableWrites.add(pendingWrites.poll());
+                availableNotEmpty.signalAll();
+
+                nextOffset += lowestWrite.getRight().length;
+                lowestWrite = pendingWrites.peek();
+            }
+
+        } finally {
+            lock.unlock();
         }
     }
 
-    private static final class Entry {
-        private final long offset;
-        private final byte[] data;
-        private final SettableFuture<Void> future;
+    public byte[] popInOrder() throws InterruptedException {
+        lock.lock();
+        try {
+            while (availableWrites.size() == 0) {
+                availableNotEmpty.await();
+            }
 
-        private Entry(long offset, byte[] data, SettableFuture<Void> future) {
-            this.offset = offset;
-            this.data = data;
-            this.future = future;
-        }
-
-        public long getOffset() {
-            return offset;
-        }
-
-        public byte[] getData() {
-            return data;
-        }
-
-        public SettableFuture<Void> getFuture() {
-            return future;
+            Pair<Long, byte[]> availableWrite = availableWrites.remove();
+            byte[] bytes = availableWrite.getRight();
+            readOffset = availableWrite.getLeft() + bytes.length;
+            writeAhead.signalAll();
+            return bytes;
+        } finally {
+            lock.unlock();
         }
     }
 }

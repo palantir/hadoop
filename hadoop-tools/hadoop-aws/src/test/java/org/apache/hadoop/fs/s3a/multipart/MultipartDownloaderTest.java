@@ -40,7 +40,7 @@ public class MultipartDownloaderTest {
             public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
                 return amazonS3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
             }
-        }, 256000);
+        }, 262144, 100000000);
 
         InputStream inputStream = multipartDownloader.download("multiparttesting", "big-file.txt", 0, 438888890);
         Files.copy(inputStream, Paths.get("/Users/juang/Desktop/big-file-downloaded.txt"), StandardCopyOption.REPLACE_EXISTING);
