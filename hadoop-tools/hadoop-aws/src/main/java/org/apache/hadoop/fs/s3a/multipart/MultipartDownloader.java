@@ -10,14 +10,14 @@ import java.util.concurrent.ExecutorService;
 public final class MultipartDownloader {
     private static final Log LOG = LogFactory.getLog(MultipartDownloader.class);
 
-    private final int partSize;
+    private final long partSize;
     private final ExecutorService downloadExecutorService;
     private final ExecutorService writingExecutorService;
     private final PartDownloader partDownloader;
-    private final int chunkSize;
-    private final int bufferSize;
+    private final long chunkSize;
+    private final long bufferSize;
 
-    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize, int bufferSize) {
+    public MultipartDownloader(long partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, long chunkSize, long bufferSize) {
         this.partSize = partSize;
         this.downloadExecutorService = downloadExecutorService;
         this.writingExecutorService = writingExecutorService;
@@ -35,7 +35,7 @@ public final class MultipartDownloader {
         final PipedOutputStream pipedOutputStream = new PipedOutputStream();
         final PipedInputStream pipedInputStream;
         try {
-            pipedInputStream = new PipedInputStream(pipedOutputStream, chunkSize);
+            pipedInputStream = new PipedInputStream(pipedOutputStream, (int) chunkSize);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -67,7 +67,7 @@ public final class MultipartDownloader {
             }
         });
 
-        for (int i = 0; i < numParts; i++) {
+        for (long i = 0; i < numParts; i++) {
             final long partRangeStart = rangeStart + i * partSize;
             final long partRangeEnd = i == numParts - 1 ? rangeEnd : partRangeStart + partSize;
 
@@ -79,8 +79,10 @@ public final class MultipartDownloader {
                          DataInputStream inputStream = new DataInputStream(s3Object.getObjectContent())) {
                         long currentOffset = partRangeStart;
                         while (currentOffset < partRangeEnd) {
-                            int bytesLeft = (int) (partRangeEnd - currentOffset);
-                            byte[] chunk = new byte[bytesLeft > chunkSize ? chunkSize : bytesLeft];
+                            long bytesLeft = partRangeEnd - currentOffset;
+                            long bytesToRead = bytesLeft > chunkSize ? chunkSize : bytesLeft;
+
+                            byte[] chunk = new byte[(int) bytesToRead];
                             inputStream.readFully(chunk);
 
                             LOG.info("Pushing offset: " + currentOffset);

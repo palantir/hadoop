@@ -13,15 +13,15 @@ public final class OrderingQueue {
     private final PriorityQueue<Pair<Long, byte[]>> pendingWrites = new PriorityQueue<>();
     private final LinkedList<Pair<Long, byte[]>> availableWrites = new LinkedList<>();
 
-    private Long nextOffset;
-    private Long readOffset;
-    private final int bufferSize;
+    private long nextOffset;
+    private long readOffset;
+    private final long bufferSize;
 
     private final Lock lock = new ReentrantLock();
     private final Condition writeAhead = lock.newCondition();
     private final Condition availableNotEmpty = lock.newCondition();
 
-    public OrderingQueue(Long startingOffset, int bufferSize) {
+    public OrderingQueue(Long startingOffset, long bufferSize) {
         this.nextOffset = startingOffset;
         this.readOffset = startingOffset;
         this.bufferSize = bufferSize;
