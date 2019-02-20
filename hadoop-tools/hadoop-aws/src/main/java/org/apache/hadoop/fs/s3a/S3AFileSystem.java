@@ -251,13 +251,13 @@ public class S3AFileSystem extends FileSystem {
       ExecutorService downloadExecutorService = Executors.newFixedThreadPool(16, new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
       multipartDownloader = new MultipartDownloader(8000000, MoreExecutors.listeningDecorator(downloadExecutorService), new PartDownloader() {
         @Override
-        public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
+        public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
           String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());
           GetObjectRequest request = new GetObjectRequest(bucket, key);
           if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) && StringUtils.isNotBlank(serverSideEncryptionKey)) {
             request.setSSECustomerKey(new SSECustomerKey(serverSideEncryptionKey));
           }
-          return s3.getObject(request.withRange(rangeStart, rangeEnd - 1));
+          return s3.getObject(request.withRange(rangeStart, rangeEnd - 1)).getObjectContent();
         }
       }, 262144, 100000000);
     } catch (AmazonClientException e) {

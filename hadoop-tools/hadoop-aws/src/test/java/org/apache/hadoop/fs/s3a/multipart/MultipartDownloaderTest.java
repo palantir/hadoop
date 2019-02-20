@@ -1,53 +1,60 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.thirdparty.apache.http.conn.socket.ConnectionSocketFactory;
-import com.amazonaws.thirdparty.apache.http.conn.ssl.SSLConnectionSocketFactory;
+import com.google.common.base.Charsets;
 import com.google.common.util.concurrent.MoreExecutors;
+import org.apache.commons.io.IOUtils;
+import org.junit.Assert;
 import org.junit.Test;
 
-import javax.net.ssl.SSLContext;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import java.security.NoSuchAlgorithmException;
-import java.util.concurrent.ExecutorService;
+import java.util.Arrays;
 import java.util.concurrent.Executors;
 
 public class MultipartDownloaderTest {
 
+    private final byte[] bytes = generateBytes(0, 1000);
+
+    private final MultipartDownloader multipartDownloader = new MultipartDownloader(
+            100,
+            MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(2)),
+            new PartDownloader() {
+                @Override
+                public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
+                    return new ByteArrayInputStream(Arrays.copyOfRange(bytes, (int) rangeStart, (int) rangeEnd));
+                }
+            },
+            10,
+            1000);
+
     @Test
-    public void testDownload() throws NoSuchAlgorithmException, InterruptedException {
-        ConnectionSocketFactory connectionSocketFactory = new SSLConnectionSocketFactory(
-                SSLContext.getDefault(),
-                new String[] {"TLSv1.2"},
-                null, null);
-        ClientConfiguration clientConfiguration = new ClientConfiguration();
-        clientConfiguration.getApacheHttpClientConfig().setSslSocketFactory(connectionSocketFactory);
-        final AmazonS3 amazonS3 = AmazonS3ClientBuilder.standard()
-                .withClientConfiguration(clientConfiguration)
-                .build();
+    public void testDownloadAll() throws IOException {
+        assertDownloadRange(0, bytes.length);
+    }
 
-        ExecutorService downloadExecutorService = Executors.newFixedThreadPool(8);
-        MultipartDownloader multipartDownloader = new MultipartDownloader(8000000, MoreExecutors.listeningDecorator(downloadExecutorService), new PartDownloader() {
-            @Override
-            public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
-                return amazonS3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
-            }
-        }, 262144, 100000000);
+    @Test
+    public void testDownloadRange() throws IOException {
+        assertDownloadRange(10, 20);
+    }
 
-        InputStream inputStream = multipartDownloader.download("multiparttesting", "big-file.txt", 0, 438888890);
-        try {
-            Files.copy(inputStream, Paths.get("/Users/juang/Desktop/big-file-downloaded.txt"), StandardCopyOption.REPLACE_EXISTING);
-        } catch (Exception e) {
-            System.out.println();
+    @Test
+    public void testDownloadTail() throws IOException {
+        assertDownloadRange(bytes.length - 10, bytes.length);
+    }
+
+    private void assertDownloadRange(int from, int to) throws IOException {
+        Assert.assertArrayEquals(
+                Arrays.copyOfRange(bytes, from, to),
+                IOUtils.toByteArray(multipartDownloader.download("bucket", "key",  from, to)));
+    }
+
+    private byte[] generateBytes(int from, int to) {
+        StringBuilder stringBuilder = new StringBuilder();
+        for (int i = from; i < to; i++) {
+            stringBuilder.append(i);
+            stringBuilder.append("\n");
         }
-        Thread.sleep(5000);
-        downloadExecutorService.shutdown();
+        return stringBuilder.toString().getBytes(Charsets.UTF_8);
     }
 }

@@ -1,9 +1,9 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
-import com.amazonaws.services.s3.model.S3Object;
+import java.io.InputStream;
 
 public interface PartDownloader {
 
-    S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd);
+    InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd);
 
 }

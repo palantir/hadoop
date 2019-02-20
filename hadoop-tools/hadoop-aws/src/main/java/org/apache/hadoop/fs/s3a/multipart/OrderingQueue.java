@@ -21,6 +21,7 @@ public final class OrderingQueue {
     private final Condition writeAhead = lock.newCondition();
     private final Condition availableNotEmpty = lock.newCondition();
 
+    private long startingOffset;
     private long nextOffset;
     private long readOffset;
     private RuntimeException exception;
@@ -28,6 +29,7 @@ public final class OrderingQueue {
     public OrderingQueue(long startingOffset, long totalSize, long bufferSize) {
         this.nextOffset = startingOffset;
         this.readOffset = startingOffset;
+        this.startingOffset = startingOffset;
         this.totalSize = totalSize;
         this.bufferSize = bufferSize;
     }
@@ -63,7 +65,7 @@ public final class OrderingQueue {
         try {
             maybeThrow();
 
-            if (readOffset == totalSize) {
+            if ((readOffset - startingOffset) == totalSize) {
                 return null;
             }
 

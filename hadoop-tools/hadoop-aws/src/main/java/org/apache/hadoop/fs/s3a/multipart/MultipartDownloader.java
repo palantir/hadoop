@@ -1,6 +1,5 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
-import com.amazonaws.services.s3.model.S3Object;
 import com.google.common.collect.Lists;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -47,8 +46,7 @@ public final class MultipartDownloader {
                 @Override
                 public void run() {
                     LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
-                    try (S3Object s3Object = partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd);
-                         DataInputStream inputStream = new DataInputStream(s3Object.getObjectContent())) {
+                    try (DataInputStream inputStream = new DataInputStream(partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd))) {
                         long currentOffset = partRangeStart;
                         while (currentOffset < partRangeEnd) {
                             long bytesLeft = partRangeEnd - currentOffset;
