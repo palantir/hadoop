@@ -478,7 +478,12 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
         // Abort, rather than just close, the underlying stream.  Otherwise, the
         // remaining object payload is read from S3 while closing the stream.
         LOG.debug("Aborting stream");
-//        wrappedStream.abort();
+        // TODO(juang) Implement aborts
+        try {
+          wrappedStream.close();
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
         streamStatistics.streamClose(true, remaining);
       }
       LOG.debug("Stream {} {}: {}; remaining={} streamPos={},"
