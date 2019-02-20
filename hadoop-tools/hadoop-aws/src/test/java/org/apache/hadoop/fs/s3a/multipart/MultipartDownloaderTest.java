@@ -40,10 +40,10 @@ public class MultipartDownloaderTest {
             public S3Object downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
                 return amazonS3.getObject(new GetObjectRequest(bucket, key).withRange(rangeStart, rangeEnd - 1));
             }
-        }, 256000, 16);
+        }, 256000);
 
-        InputStream inputStream = multipartDownloader.download("multiparttesting", "fairscheduler.xml", 0, 101);
-        Files.copy(inputStream, Paths.get("/Users/juang/Desktop/fairscheduler.xml"), StandardCopyOption.REPLACE_EXISTING);
+        InputStream inputStream = multipartDownloader.download("multiparttesting", "big-file.txt", 0, 438888890);
+        Files.copy(inputStream, Paths.get("/Users/juang/Desktop/big-file-downloaded.txt"), StandardCopyOption.REPLACE_EXISTING);
         downloadExecutorService.shutdown();
         writingExecutorService.shutdown();
     }

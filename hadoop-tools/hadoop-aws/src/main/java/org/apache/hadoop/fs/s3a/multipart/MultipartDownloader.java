@@ -1,12 +1,16 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
-import com.amazonaws.services.s3.model.S3Object;
+import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.SettableFuture;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import java.io.*;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Semaphore;
 
 public final class MultipartDownloader {
     private static final Log LOG = LogFactory.getLog(MultipartDownloader.class);
@@ -16,22 +20,20 @@ public final class MultipartDownloader {
     private final ExecutorService writingExecutorService;
     private final PartDownloader partDownloader;
     private final int chunkSize;
-    private final Semaphore semaphore;
 
-    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize, int concurrentParts) {
+    public MultipartDownloader(int partSize, ExecutorService downloadExecutorService, ExecutorService writingExecutorService, PartDownloader partDownloader, int chunkSize) {
         this.partSize = partSize;
         this.downloadExecutorService = downloadExecutorService;
         this.writingExecutorService = writingExecutorService;
         this.partDownloader = partDownloader;
         this.chunkSize = chunkSize;
-        semaphore = new Semaphore(concurrentParts);
     }
 
     public InputStream download(final String bucket, final String key, long rangeStart, long rangeEnd) {
         final long size = rangeEnd - rangeStart;
         int numParts = (int) Math.ceil((double) size / partSize);
 
-        final DeferQueue deferQueue = new DeferQueue(rangeStart);
+        final OrderingQueue orderingQueue = new OrderingQueue(rangeStart);
 
         final PipedOutputStream pipedOutputStream = new PipedOutputStream();
         PipedInputStream pipedInputStream;
@@ -48,19 +50,17 @@ public final class MultipartDownloader {
                     long writtenBytes = 0;
                     while (writtenBytes < size) {
                         LOG.debug("Writing out bytes for offset " + writtenBytes);
-                        byte[] bytes = deferQueue.popAvailableWrite();
+                        Pair<byte[], SettableFuture<Void>> pair = orderingQueue.popInOrder();
+                        byte[] chunk = pair.getLeft();
                         try {
-                            pipedOutputStream.write(bytes);
+                            pipedOutputStream.write(chunk);
                         } catch (IOException e) {
                             throw new RuntimeException(e);
                         }
 
-                        writtenBytes += bytes.length;
-
-                        // release every part bytes
-                        if (writtenBytes % partSize == 0 || writtenBytes == size) {
-                            semaphore.release();
-                        }
+                        writtenBytes += chunk.length;
+                        SettableFuture<Void> settableFuture = pair.getRight();
+                        settableFuture.set(null);
                     }
                     try {
                         pipedOutputStream.close();
@@ -77,27 +77,24 @@ public final class MultipartDownloader {
             final long partRangeStart = rangeStart + i * partSize;
             final long partRangeEnd = i == numParts - 1 ? rangeEnd : partRangeStart + partSize;
 
-            try {
-                semaphore.acquire();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw new RuntimeException(e);
-            }
-
             downloadExecutorService.submit(new Runnable() {
                 @Override
                 public void run() {
                     LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
-                    try (S3Object s3Object = partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd);
-                        DataInputStream inputStream = new DataInputStream(s3Object.getObjectContent())) {
+                    try (DataInputStream inputStream = new DataInputStream(partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd).getObjectContent())) {
                         long currentOffset = partRangeStart;
+                        List<ListenableFuture<?>> chunkFutures = Lists.newArrayList();
                         while (currentOffset < partRangeEnd) {
                             int bytesLeft = (int) (partRangeEnd - currentOffset);
                             byte[] chunk = new byte[bytesLeft > chunkSize ? chunkSize : bytesLeft];
                             inputStream.readFully(chunk);
-                            deferQueue.addWriteAndRequestAvailable(currentOffset, chunk);
+
+                            chunkFutures.add(orderingQueue.push(currentOffset, chunk));
                             currentOffset += chunk.length;
                         }
+
+                        // Block until all chunks written
+                        Futures.allAsList(chunkFutures).get();
                     } catch (Throwable e) {
                         LOG.error("Exception caught while downloading part", e);
                     }
