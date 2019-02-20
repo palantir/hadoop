@@ -247,7 +247,7 @@ public class S3AFileSystem extends FileSystem {
             getMetadataStore(), allowAuthoritative);
       }
 
-      ExecutorService downloadExecutorService = Executors.newFixedThreadPool(8, new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
+      ExecutorService downloadExecutorService = Executors.newFixedThreadPool(16, new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
       ExecutorService writingExecutorService = Executors.newCachedThreadPool();
       multipartDownloader = new MultipartDownloader(8000000, downloadExecutorService, writingExecutorService, new PartDownloader() {
         @Override
