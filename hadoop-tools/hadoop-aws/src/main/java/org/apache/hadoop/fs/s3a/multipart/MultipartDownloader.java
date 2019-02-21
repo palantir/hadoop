@@ -46,6 +46,8 @@ public final class MultipartDownloader {
                 @Override
                 public void run() {
                     LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
+                    // Since the parts should be small, we should be able to just close the streams instead of abort.
+                    // try-with-resources will call close when we get interrupted
                     try (DataInputStream inputStream = new DataInputStream(partDownloader.downloadPart(bucket, key, partRangeStart, partRangeEnd))) {
                         long currentOffset = partRangeStart;
                         while (currentOffset < partRangeEnd) {
@@ -96,7 +98,7 @@ public final class MultipartDownloader {
 
     private void cancelAllDownloads(List<ListenableFuture<?>> partFutures) {
         for (ListenableFuture<?> partFuture : partFutures) {
-            partFuture.cancel(false);
+            partFuture.cancel(true);
         }
     }
 }
