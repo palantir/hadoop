@@ -104,8 +104,8 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
                         FileSystem.Statistics stats,
                         S3AInstrumentation instrumentation,
                         long readahead,
-                        S3AInputPolicy inputPolicy, MultipartDownloader multipartDownloader) {
-    this.multipartDownloader = multipartDownloader;
+                        S3AInputPolicy inputPolicy,
+                        MultipartDownloader multipartDownloader) {
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getBucket()), "No Bucket");
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getKey()), "No Key");
     Preconditions.checkArgument(contentLength >= 0, "Negative content length");
@@ -116,6 +116,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
     this.uri = "s3a://" + this.bucket + "/" + this.key;
     this.streamStatistics = instrumentation.newInputStreamStatistics();
     this.inputPolicy = inputPolicy;
+    this.multipartDownloader = multipartDownloader;
     setReadahead(readahead);
   }
 

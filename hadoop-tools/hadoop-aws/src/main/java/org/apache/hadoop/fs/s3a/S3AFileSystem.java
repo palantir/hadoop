@@ -560,7 +560,8 @@ public class S3AFileSystem extends FileSystem {
             statistics,
             instrumentation,
             readAhead,
-            inputPolicy, multipartDownloader));
+            inputPolicy,
+            multipartDownloader));
   }
 
   /**
