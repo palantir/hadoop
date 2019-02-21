@@ -80,7 +80,7 @@ public final class MultipartDownloader {
 
                 @Override
                 public void onFailure(Throwable throwable) {
-                    orderingQueue.propagateException(new RuntimeException("Exception caught while downloading part", throwable));
+                    orderingQueue.closeWithException(new RuntimeException("Exception caught while downloading part", throwable));
                     cancelAllDownloads(partFutures);
                 }
             });
