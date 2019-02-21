@@ -4,7 +4,7 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class OrderingQueueInputStream extends InputStream {
+public final class OrderingQueueInputStream extends InputStream {
 
     private final OrderingQueue orderingQueue;
     private final Runnable closeAction;
@@ -32,12 +32,6 @@ public class OrderingQueueInputStream extends InputStream {
     public int read(byte[] b, int off, int len) {
         fillByteArrayInputStream();
         return inputStream.read(b, off, len);
-    }
-
-    @Override
-    public long skip(long n) {
-        fillByteArrayInputStream();
-        return inputStream.skip(n);
     }
 
     @Override
