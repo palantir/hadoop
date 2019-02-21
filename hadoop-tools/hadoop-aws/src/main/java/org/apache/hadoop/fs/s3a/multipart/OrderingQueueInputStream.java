@@ -2,9 +2,8 @@ package org.apache.hadoop.fs.s3a.multipart;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 
-public final class OrderingQueueInputStream extends InputStream {
+public final class OrderingQueueInputStream extends AbortableInputStream {
 
     private final OrderingQueue orderingQueue;
     private final Runnable closeAction;
@@ -63,5 +62,13 @@ public final class OrderingQueueInputStream extends InputStream {
                 throw new RuntimeException(e);
             }
         }
+    }
+
+    @Override
+    /**
+     * Do same thing as close since we have small part downloads.
+     */
+    public void abort() throws IOException {
+        close();
     }
 }

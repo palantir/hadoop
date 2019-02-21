@@ -19,7 +19,6 @@
 package org.apache.hadoop.fs.s3a;
 
 import com.amazonaws.AmazonClientException;
-import com.amazonaws.services.s3.AmazonS3;
 import com.google.common.base.Preconditions;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
@@ -27,13 +26,13 @@ import org.apache.hadoop.fs.CanSetReadahead;
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.s3a.multipart.AbortableInputStream;
 import org.apache.hadoop.fs.s3a.multipart.MultipartDownloader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
 
 import static org.apache.commons.lang.StringUtils.isNotEmpty;
 import static org.apache.hadoop.fs.s3a.S3AUtils.translateException;
@@ -69,9 +68,8 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
    * set
    */
   private volatile boolean closed;
-  private InputStream wrappedStream;
+  private AbortableInputStream wrappedStream;
   private final FileSystem.Statistics stats;
-  private final AmazonS3 client;
   private final String bucket;
   private final String key;
   private final long contentLength;
@@ -79,8 +77,6 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
   private static final Logger LOG =
       LoggerFactory.getLogger(S3AInputStream.class);
   private final S3AInstrumentation.InputStreamStatistics streamStatistics;
-  private S3AEncryptionMethods serverSideEncryptionAlgorithm;
-  private String serverSideEncryptionKey;
   private final S3AInputPolicy inputPolicy;
   private long readahead = Constants.DEFAULT_READAHEAD_RANGE;
 
@@ -105,7 +101,6 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
 
   public S3AInputStream(S3ObjectAttributes s3Attributes,
                         long contentLength,
-                        AmazonS3 client,
                         FileSystem.Statistics stats,
                         S3AInstrumentation instrumentation,
                         long readahead,
@@ -117,13 +112,9 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
     this.bucket = s3Attributes.getBucket();
     this.key = s3Attributes.getKey();
     this.contentLength = contentLength;
-    this.client = client;
     this.stats = stats;
     this.uri = "s3a://" + this.bucket + "/" + this.key;
     this.streamStatistics = instrumentation.newInputStreamStatistics();
-    this.serverSideEncryptionAlgorithm =
-        s3Attributes.getServerSideEncryptionAlgorithm();
-    this.serverSideEncryptionKey = s3Attributes.getServerSideEncryptionKey();
     this.inputPolicy = inputPolicy;
     setReadahead(readahead);
   }
@@ -478,9 +469,8 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
         // Abort, rather than just close, the underlying stream.  Otherwise, the
         // remaining object payload is read from S3 while closing the stream.
         LOG.debug("Aborting stream");
-        // TODO(juang) Implement aborts
         try {
-          wrappedStream.close();
+          wrappedStream.abort();
         } catch (IOException e) {
           throw new RuntimeException(e);
         }

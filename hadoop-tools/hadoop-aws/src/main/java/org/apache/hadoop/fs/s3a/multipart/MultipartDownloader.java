@@ -10,7 +10,6 @@ import org.apache.commons.logging.LogFactory;
 
 import java.io.DataInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.List;
 
 public final class MultipartDownloader {
@@ -30,7 +29,7 @@ public final class MultipartDownloader {
         this.bufferSize = bufferSize;
     }
 
-    public InputStream download(final String bucket, final String key, long rangeStart, long rangeEnd) {
+    public AbortableInputStream download(final String bucket, final String key, long rangeStart, long rangeEnd) {
         final long size = rangeEnd - rangeStart;
         int numParts = (int) Math.ceil((double) size / partSize);
 

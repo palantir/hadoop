@@ -557,7 +557,6 @@ public class S3AFileSystem extends FileSystem {
           serverSideEncryptionAlgorithm,
           getServerSideEncryptionKey(getConf())),
             fileStatus.getLen(),
-            s3,
             statistics,
             instrumentation,
             readAhead,
