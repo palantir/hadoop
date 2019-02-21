@@ -456,4 +456,15 @@ public final class Constants {
   public static final String FAIL_INJECT_INCONSISTENCY_PROBABILITY =
       "fs.s3a.failinject.inconsistency.probability";
 
+  public static final String MULTIPART_DOWNLOAD_PART_SIZE = "fs.s3a.multipartdownload.part-size";
+  public static final long DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE = 8_000_000;
+
+  public static final String MULTIPART_DOWNLOAD_CHUNK_SIZE = "fs.s3a.multipartdownload.chunk-size";
+  public static final long DEFAULT_MULTIPART_DOWNLOAD_CHUNK_SIZE = 262_144;
+
+  public static final String MULTIPART_DOWNLOAD_BUFFER_SIZE = "fs.s3a.multipartdownload.buffer-size";
+  public static final long DEFAULT_MULTIPART_DOWNLOAD_BUFFER_SIZE = 100_000_000;
+
+  public static final String MULTIPART_DOWNLOAD_NUM_THREADS = "fs.s3a.multipartdownload.num-threads";
+  public static final int DEFAULT_MULTIPART_DOWNLOAD_NUM_THREADS = 8;
 }

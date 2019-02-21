@@ -248,18 +248,25 @@ public class S3AFileSystem extends FileSystem {
             getMetadataStore(), allowAuthoritative);
       }
 
-      ExecutorService downloadExecutorService = Executors.newFixedThreadPool(16, new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
-      multipartDownloader = new MultipartDownloader(8000000, MoreExecutors.listeningDecorator(downloadExecutorService), new PartDownloader() {
-        @Override
-        public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
-          String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());
-          GetObjectRequest request = new GetObjectRequest(bucket, key);
-          if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) && StringUtils.isNotBlank(serverSideEncryptionKey)) {
-            request.setSSECustomerKey(new SSECustomerKey(serverSideEncryptionKey));
-          }
-          return s3.getObject(request.withRange(rangeStart, rangeEnd - 1)).getObjectContent();
-        }
-      }, 262144, 100000000);
+      ExecutorService downloadExecutorService = Executors.newFixedThreadPool(
+              intOption(conf, MULTIPART_DOWNLOAD_NUM_THREADS, DEFAULT_MULTIPART_DOWNLOAD_NUM_THREADS, 0),
+              new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
+      multipartDownloader = new MultipartDownloader(
+              longOption(conf, MULTIPART_DOWNLOAD_PART_SIZE, DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE, 0),
+              MoreExecutors.listeningDecorator(downloadExecutorService),
+              new PartDownloader() {
+                @Override
+                public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
+                  String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());
+                  GetObjectRequest request = new GetObjectRequest(bucket, key);
+                  if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) && StringUtils.isNotBlank(serverSideEncryptionKey)) {
+                    request.setSSECustomerKey(new SSECustomerKey(serverSideEncryptionKey));
+                  }
+                  return s3.getObject(request.withRange(rangeStart, rangeEnd - 1)).getObjectContent();
+                }
+              },
+              longOption(conf, MULTIPART_DOWNLOAD_CHUNK_SIZE, DEFAULT_MULTIPART_DOWNLOAD_CHUNK_SIZE, 0),
+              longOption(conf, MULTIPART_DOWNLOAD_BUFFER_SIZE, DEFAULT_MULTIPART_DOWNLOAD_BUFFER_SIZE, 0));
     } catch (AmazonClientException e) {
       throw translateException("initializing ", new Path(name), e);
     }
