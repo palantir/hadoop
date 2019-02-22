@@ -9,6 +9,7 @@ import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MultipartDownloader implements S3Downloader {
     private static final Log LOG = LogFactory.getLog(MultipartDownloader.class);
@@ -35,6 +36,7 @@ public final class MultipartDownloader implements S3Downloader {
         final OrderingQueue orderingQueue = new OrderingQueue(rangeStart, size, bufferSize);
 
         final List<ListenableFuture<?>> partFutures = Lists.newArrayList();
+        final AtomicBoolean isAbort = new AtomicBoolean();
 
         for (long i = 0; i < numParts; i++) {
             final long partRangeStart = rangeStart + i * partSize;
@@ -46,14 +48,16 @@ public final class MultipartDownloader implements S3Downloader {
                     LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
                     // Since the parts should be small, we should be able to just close the streams instead of abort.
                     // try-with-resources will call close when we get interrupted
-                    try (DataInputStream inputStream = new DataInputStream(partDownloader.download(bucket, key, partRangeStart, partRangeEnd))) {
+                    AbortableInputStream abortableInputStream = partDownloader.download(bucket, key, partRangeStart, partRangeEnd);
+                    try {
+                        DataInputStream dataInputStream = new DataInputStream(abortableInputStream);
                         long currentOffset = partRangeStart;
                         while (currentOffset < partRangeEnd) {
                             long bytesLeft = partRangeEnd - currentOffset;
                             long bytesToRead = bytesLeft > chunkSize ? chunkSize : bytesLeft;
 
                             byte[] chunk = new byte[(int) bytesToRead];
-                            inputStream.readFully(chunk);
+                            dataInputStream.readFully(chunk);
 
                             LOG.debug("Pushing offset: " + currentOffset);
                             orderingQueue.push(currentOffset, chunk);
@@ -64,6 +68,19 @@ public final class MultipartDownloader implements S3Downloader {
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         throw new RuntimeException(e);
+                    } finally {
+                        if (abortableInputStream != null) {
+                            try {
+                                if (isAbort.get()) {
+                                    abortableInputStream.abort();
+                                } else {
+                                    abortableInputStream.close();
+                                }
+                            } catch (IOException e) {
+                                // TODO use try-with-resources
+                                throw new RuntimeException(e);
+                            }
+                        }
                     }
                 }
             });
@@ -89,6 +106,13 @@ public final class MultipartDownloader implements S3Downloader {
         return new OrderingQueueInputStream(orderingQueue, new Runnable() {
             @Override
             public void run() {
+                isAbort.set(false);
+                cancelAllDownloads(partFutures);
+            }
+        }, new Runnable() {
+            @Override
+            public void run() {
+                isAbort.set(true);
                 cancelAllDownloads(partFutures);
             }
         });

@@ -24,7 +24,7 @@ public final class OrderingQueueInputStreamTest {
             public void run() {
             }
         };
-        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction)) {
+        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction, closeAction)) {
             byte[] bytes = new byte[10];
             for(int i = 0; i < bytes.length; i++) {
                 bytes[i] = (byte) i;
@@ -43,11 +43,27 @@ public final class OrderingQueueInputStreamTest {
     public void testCloseActionCalled() throws IOException {
         OrderingQueue orderingQueue = new OrderingQueue(0, 10, 10);
         Runnable closeAction = mock(Runnable.class);
-        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction)) {
+        Runnable abortAction = mock(Runnable.class);
+        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction, abortAction)) {
             verifyZeroInteractions(closeAction);
+            verifyZeroInteractions(abortAction);
         }
 
-        verify(closeAction, Mockito.times(1));
+        verify(closeAction, Mockito.times(1)).run();
+        verify(abortAction, Mockito.times(0)).run();
+    }
+
+    @Test
+    public void testAbortActionCalled() throws IOException {
+        OrderingQueue orderingQueue = new OrderingQueue(0, 10, 10);
+        Runnable closeAction = mock(Runnable.class);
+        Runnable abortAction = mock(Runnable.class);
+        verifyZeroInteractions(closeAction);
+        OrderingQueueInputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction, abortAction);
+        inputStream.abort();
+
+        verify(closeAction, Mockito.times(0)).run();
+        verify(abortAction, Mockito.times(1)).run();
     }
 
     @Test
@@ -67,7 +83,7 @@ public final class OrderingQueueInputStreamTest {
             public void run() {
             }
         };
-        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction)) {
+        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction, closeAction)) {
             assertEquals(0, inputStream.read());
 
             byte[] bytesToRead = new byte[3];
@@ -101,7 +117,7 @@ public final class OrderingQueueInputStreamTest {
             public void run() {
             }
         };
-        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction)) {
+        try (InputStream inputStream = new OrderingQueueInputStream(orderingQueue, closeAction, closeAction)) {
             inputStream.skip(9);
             assertEquals(9, inputStream.read());
         }

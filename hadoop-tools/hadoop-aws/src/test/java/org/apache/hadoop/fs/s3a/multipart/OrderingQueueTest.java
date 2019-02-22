@@ -81,11 +81,12 @@ public class OrderingQueueTest {
 
         final RuntimeException myException = new RuntimeException("My Exception");
 
+        orderingQueue.push(0, new byte[5]);
         executorService.submit(new Runnable() {
             @Override
             public void run() {
                 try {
-                    orderingQueue.push(0, new byte[11]);
+                    orderingQueue.push(5, new byte[6]);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 } catch (RuntimeException e) {

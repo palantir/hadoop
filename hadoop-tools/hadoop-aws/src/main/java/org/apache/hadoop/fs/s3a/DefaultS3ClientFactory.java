@@ -24,13 +24,17 @@ import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.S3ClientOptions;
+import com.amazonaws.thirdparty.apache.http.conn.socket.ConnectionSocketFactory;
+import com.amazonaws.thirdparty.apache.http.conn.ssl.SSLConnectionSocketFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.util.VersionInfo;
 import org.slf4j.Logger;
 
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.net.URI;
+import java.security.NoSuchAlgorithmException;
 
 import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.S3AUtils.createAWSCredentialProviderSet;
@@ -61,7 +65,18 @@ public class DefaultS3ClientFactory extends Configured implements
    * @return new AWS client configuration
    */
   public static ClientConfiguration createAwsConf(Configuration conf) {
+    ConnectionSocketFactory connectionSocketFactory;
+    try {
+      connectionSocketFactory = new SSLConnectionSocketFactory(
+              SSLContext.getDefault(),
+              new String[] {"TLSv1.2"},
+              null, null);
+    } catch (NoSuchAlgorithmException e) {
+      throw new RuntimeException(e);
+    }
+
     final ClientConfiguration awsConf = new ClientConfiguration();
+    awsConf.getApacheHttpClientConfig().setSslSocketFactory(connectionSocketFactory);
     initConnectionSettings(conf, awsConf);
     initProxySupport(conf, awsConf);
     initUserAgent(conf, awsConf);

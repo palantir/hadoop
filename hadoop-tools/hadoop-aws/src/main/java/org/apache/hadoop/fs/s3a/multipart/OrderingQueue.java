@@ -33,6 +33,7 @@ public final class OrderingQueue {
 
     public void push(long offset, byte[] data) throws InterruptedException {
         Preconditions.checkArgument(offset >= 0);
+        Preconditions.checkArgument(data.length <= bufferSize);
         lock.lock();
         try {
             maybeThrow();

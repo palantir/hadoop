@@ -7,12 +7,14 @@ public final class OrderingQueueInputStream extends AbortableInputStream {
 
     private final OrderingQueue orderingQueue;
     private final Runnable closeAction;
+    private final Runnable abortAction;
 
     private ByteArrayInputStream inputStream = new ByteArrayInputStream(new byte[0]);
 
-    public OrderingQueueInputStream(OrderingQueue orderingQueue, Runnable closeAction) {
+    public OrderingQueueInputStream(OrderingQueue orderingQueue, Runnable closeAction, Runnable abortAction) {
         this.orderingQueue = orderingQueue;
         this.closeAction = closeAction;
+        this.abortAction = abortAction;
     }
 
     @Override
@@ -69,6 +71,7 @@ public final class OrderingQueueInputStream extends AbortableInputStream {
      * Do same thing as close since we have small part downloads.
      */
     public void abort() throws IOException {
-        close();
+        inputStream.close();
+        abortAction.run();
     }
 }

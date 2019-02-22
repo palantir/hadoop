@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class MultipartDownloaderTest {
@@ -34,7 +35,7 @@ public class MultipartDownloaderTest {
                         }
 
                         @Override
-                        public int read() throws IOException {
+                        public int read() {
                             return byteArrayInputStream.read();
                         }
                     };
@@ -95,15 +96,25 @@ public class MultipartDownloaderTest {
 
     @Test
     public void testCancelPartsIfClosed() throws InterruptedException, IOException {
+        testCompletion(false);
+    }
+
+    @Test
+    public void testPropagateAbortIfAborted() throws InterruptedException, IOException {
+        testCompletion(true);
+    }
+
+    private void testCompletion(boolean checkAborted) throws IOException, InterruptedException {
         final AtomicBoolean closed = new AtomicBoolean();
+        final AtomicBoolean aborted = new AtomicBoolean();
 
         S3Downloader partDownloader = new S3Downloader() {
             @Override
             public AbortableInputStream download(String bucket, String key, long rangeStart, long rangeEnd) {
                 return new AbortableInputStream() {
                     @Override
-                    public void abort() throws IOException {
-                        close();
+                    public void abort() {
+                        aborted.set(true);
                     }
 
                     @Override
@@ -125,11 +136,22 @@ public class MultipartDownloaderTest {
         };
         ListeningExecutorService executorService = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(2));
         MultipartDownloader multipartDownloader = new MultipartDownloader(100, executorService, partDownloader, 10, 1000);
-        multipartDownloader.download("bucket", "key", 0, 1000).close();
+        AbortableInputStream download = multipartDownloader.download("bucket", "key", 0, 1000);
+        if (checkAborted) {
+            download.abort();
+        } else {
+            download.close();
+        }
 
         executorService.shutdown();
         assertTrue(executorService.awaitTermination(1, TimeUnit.SECONDS));
-        assertTrue(closed.get());
+        if (checkAborted) {
+            assertFalse(closed.get());
+            assertTrue(aborted.get());
+        } else {
+            assertFalse(aborted.get());
+            assertTrue(closed.get());
+        }
     }
 
 
