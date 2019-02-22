@@ -40,8 +40,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.fs.s3a.multipart.AbortableInputStream;
 import org.apache.hadoop.fs.s3a.multipart.MultipartDownloader;
-import org.apache.hadoop.fs.s3a.multipart.PartDownloader;
+import org.apache.hadoop.fs.s3a.multipart.S3Downloader;
 import org.apache.hadoop.fs.s3a.s3guard.*;
 import org.apache.hadoop.fs.s3native.S3xLoginHelper;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -117,7 +118,7 @@ public class S3AFileSystem extends FileSystem {
   private S3ADataBlocks.BlockFactory blockFactory;
   private int blockOutputActiveBlocks;
 
-  private MultipartDownloader multipartDownloader;
+  private S3Downloader s3Downloader;
 
   /** Add any deprecated keys. */
   @SuppressWarnings("deprecation")
@@ -248,29 +249,87 @@ public class S3AFileSystem extends FileSystem {
             getMetadataStore(), allowAuthoritative);
       }
 
-      ExecutorService downloadExecutorService = Executors.newFixedThreadPool(
-              intOption(conf, MULTIPART_DOWNLOAD_NUM_THREADS, DEFAULT_MULTIPART_DOWNLOAD_NUM_THREADS, 0),
-              new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
-      multipartDownloader = new MultipartDownloader(
-              longOption(conf, MULTIPART_DOWNLOAD_PART_SIZE, DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE, 0),
-              MoreExecutors.listeningDecorator(downloadExecutorService),
-              new PartDownloader() {
-                @Override
-                public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
-                  String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());
-                  GetObjectRequest request = new GetObjectRequest(bucket, key);
-                  if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) && StringUtils.isNotBlank(serverSideEncryptionKey)) {
-                    request.setSSECustomerKey(new SSECustomerKey(serverSideEncryptionKey));
-                  }
-                  return s3.getObject(request.withRange(rangeStart, rangeEnd - 1)).getObjectContent();
-                }
-              },
-              longOption(conf, MULTIPART_DOWNLOAD_CHUNK_SIZE, DEFAULT_MULTIPART_DOWNLOAD_CHUNK_SIZE, 0),
-              longOption(conf, MULTIPART_DOWNLOAD_BUFFER_SIZE, DEFAULT_MULTIPART_DOWNLOAD_BUFFER_SIZE, 0));
+      S3Downloader rawS3Downloader = new S3Downloader() {
+        @Override
+        public AbortableInputStream download(String bucket, String key, long rangeStart, long rangeEnd) {
+          String serverSideEncryptionKey = getServerSideEncryptionKey(getConf());
+          GetObjectRequest request = new GetObjectRequest(bucket, key);
+          if (S3AEncryptionMethods.SSE_C.equals(serverSideEncryptionAlgorithm) && StringUtils.isNotBlank(serverSideEncryptionKey)) {
+            request.setSSECustomerKey(new SSECustomerKey(serverSideEncryptionKey));
+          }
+          final S3ObjectInputStream s3ObjectInputStream = s3.getObject(request.withRange(rangeStart, rangeEnd - 1)).getObjectContent();
+          return new AbortableInputStream() {
+            @Override
+            public int read(byte[] b) throws IOException {
+              return s3ObjectInputStream.read(b);
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) throws IOException {
+                return s3ObjectInputStream.read(b, off, len);
+            }
+
+            @Override
+            public long skip(long n) throws IOException {
+                return s3ObjectInputStream.skip(n);
+            }
+
+            @Override
+            public int available() throws IOException {
+              return s3ObjectInputStream.available();
+            }
+
+            @Override
+            public void close() throws IOException {
+              s3ObjectInputStream.close();
+            }
+
+            @Override
+            public synchronized void mark(int readlimit) {
+              s3ObjectInputStream.mark(readlimit);
+            }
+
+            @Override
+            public synchronized void reset() throws IOException {
+              s3ObjectInputStream.reset();
+            }
+
+            @Override
+            public boolean markSupported() {
+              return s3ObjectInputStream.markSupported();
+            }
+
+            @Override
+            public void abort() {
+              s3ObjectInputStream.abort();
+            }
+
+            @Override
+            public int read() throws IOException {
+              return s3ObjectInputStream.read();
+            }
+          };
+        }
+      };
+
+      boolean multipartDownloadEnabled = conf.getBoolean(MULTIPART_DOWNLOAD_ENABLED, DEFAULT_MULTIPART_DOWNLOAD_ENABLED);
+      if (multipartDownloadEnabled) {
+        ExecutorService downloadExecutorService = Executors.newFixedThreadPool(
+                intOption(conf, MULTIPART_DOWNLOAD_NUM_THREADS, DEFAULT_MULTIPART_DOWNLOAD_NUM_THREADS, 0),
+                new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
+        this.s3Downloader = new MultipartDownloader(
+                longOption(conf, MULTIPART_DOWNLOAD_PART_SIZE, DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE, 0),
+                MoreExecutors.listeningDecorator(downloadExecutorService),
+                rawS3Downloader,
+                longOption(conf, MULTIPART_DOWNLOAD_CHUNK_SIZE, DEFAULT_MULTIPART_DOWNLOAD_CHUNK_SIZE, 0),
+                longOption(conf, MULTIPART_DOWNLOAD_BUFFER_SIZE, DEFAULT_MULTIPART_DOWNLOAD_BUFFER_SIZE, 0));
+      } else {
+        this.s3Downloader = rawS3Downloader;
+      }
+
     } catch (AmazonClientException e) {
       throw translateException("initializing ", new Path(name), e);
     }
-
   }
 
   /**
@@ -568,7 +627,7 @@ public class S3AFileSystem extends FileSystem {
             instrumentation,
             readAhead,
             inputPolicy,
-            multipartDownloader));
+            s3Downloader));
   }
 
   /**

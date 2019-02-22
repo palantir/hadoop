@@ -456,6 +456,9 @@ public final class Constants {
   public static final String FAIL_INJECT_INCONSISTENCY_PROBABILITY =
       "fs.s3a.failinject.inconsistency.probability";
 
+  public static final String MULTIPART_DOWNLOAD_ENABLED = "fs.s3a.multipartdownload.enabled";
+  public static final boolean DEFAULT_MULTIPART_DOWNLOAD_ENABLED = false;
+
   public static final String MULTIPART_DOWNLOAD_PART_SIZE = "fs.s3a.multipartdownload.part-size";
   public static final long DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE = 8_000_000;
 

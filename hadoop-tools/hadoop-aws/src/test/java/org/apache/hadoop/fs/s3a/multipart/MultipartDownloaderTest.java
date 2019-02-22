@@ -9,7 +9,6 @@ import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.Arrays;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -24,10 +23,21 @@ public class MultipartDownloaderTest {
     private final MultipartDownloader multipartDownloader = new MultipartDownloader(
             100,
             MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(2)),
-            new PartDownloader() {
+            new S3Downloader() {
                 @Override
-                public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
-                    return new ByteArrayInputStream(Arrays.copyOfRange(bytes, (int) rangeStart, (int) rangeEnd));
+                public AbortableInputStream download(String bucket, String key, long rangeStart, long rangeEnd) {
+                    final ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(Arrays.copyOfRange(bytes, (int) rangeStart, (int) rangeEnd));
+                    return new AbortableInputStream() {
+                        @Override
+                        public void abort() throws IOException {
+                            close();
+                        }
+
+                        @Override
+                        public int read() throws IOException {
+                            return byteArrayInputStream.read();
+                        }
+                    };
                 }
             },
             10,
@@ -50,13 +60,18 @@ public class MultipartDownloaderTest {
 
     @Test
     public void testCancelPartsIfFailure() throws InterruptedException {
-        PartDownloader partDownloader = new PartDownloader() {
+        S3Downloader partDownloader = new S3Downloader() {
             @Override
-            public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
+            public AbortableInputStream download(String bucket, String key, long rangeStart, long rangeEnd) {
                 if (rangeStart == 0) {
                     throw new RuntimeException();
                 } else {
-                    return new InputStream() {
+                    return new AbortableInputStream() {
+                        @Override
+                        public void abort() throws IOException {
+                            close();
+                        }
+
                         @Override
                         public int read() {
                             try {
@@ -82,10 +97,15 @@ public class MultipartDownloaderTest {
     public void testCancelPartsIfClosed() throws InterruptedException, IOException {
         final AtomicBoolean closed = new AtomicBoolean();
 
-        PartDownloader partDownloader = new PartDownloader() {
+        S3Downloader partDownloader = new S3Downloader() {
             @Override
-            public InputStream downloadPart(String bucket, String key, long rangeStart, long rangeEnd) {
-                return new InputStream() {
+            public AbortableInputStream download(String bucket, String key, long rangeStart, long rangeEnd) {
+                return new AbortableInputStream() {
+                    @Override
+                    public void abort() throws IOException {
+                        close();
+                    }
+
                     @Override
                     public int read() {
                         try {

@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.FSInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.s3a.multipart.AbortableInputStream;
-import org.apache.hadoop.fs.s3a.multipart.MultipartDownloader;
+import org.apache.hadoop.fs.s3a.multipart.S3Downloader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,7 +97,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
    */
   private long contentRangeStart;
 
-  private MultipartDownloader multipartDownloader;
+  private S3Downloader s3Downloader;
 
   public S3AInputStream(S3ObjectAttributes s3Attributes,
                         long contentLength,
@@ -105,7 +105,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
                         S3AInstrumentation instrumentation,
                         long readahead,
                         S3AInputPolicy inputPolicy,
-                        MultipartDownloader multipartDownloader) {
+                        S3Downloader s3Downloader) {
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getBucket()), "No Bucket");
     Preconditions.checkArgument(isNotEmpty(s3Attributes.getKey()), "No Key");
     Preconditions.checkArgument(contentLength >= 0, "Negative content length");
@@ -116,7 +116,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
     this.uri = "s3a://" + this.bucket + "/" + this.key;
     this.streamStatistics = instrumentation.newInputStreamStatistics();
     this.inputPolicy = inputPolicy;
-    this.multipartDownloader = multipartDownloader;
+    this.s3Downloader = s3Downloader;
     setReadahead(readahead);
   }
 
@@ -143,7 +143,7 @@ public class S3AInputStream extends FSInputStream implements CanSetReadahead {
 
     streamStatistics.streamOpened();
     try {
-      wrappedStream = multipartDownloader.download(bucket, key, targetPos, contentRangeFinish);
+      wrappedStream = s3Downloader.download(bucket, key, targetPos, contentRangeFinish);
       contentRangeStart = targetPos;
       if (wrappedStream == null) {
         throw new IOException("Null IO stream from reopen of (" + reason +  ") "
