@@ -1,6 +1,7 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
 import com.google.common.base.Preconditions;
+import com.google.common.primitives.Ints;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -67,7 +68,7 @@ public final class MultipartDownloader implements S3Downloader {
                         long currentOffset = partRangeStart;
                         while (currentOffset < partRangeEnd) {
                             long bytesLeft = partRangeEnd - currentOffset;
-                            int bytesToRead = toIntExact(bytesLeft > chunkSize ? chunkSize : bytesLeft);
+                            int bytesToRead = Ints.checkedCast(bytesLeft > chunkSize ? chunkSize : bytesLeft);
 
                             byte[] chunk = new byte[bytesToRead];
                             dataInputStream.readFully(chunk);
@@ -155,17 +156,5 @@ public final class MultipartDownloader implements S3Downloader {
         public String toString() {
             return "MultipartDownloader.directExecutor()";
         }
-    }
-
-    /**
-     * Copied from Math#toIntExact from Java 7.
-     * @param value
-     * @return
-     */
-    private static int toIntExact(long value) {
-        if ((int)value != value) {
-            throw new ArithmeticException("integer overflow");
-        }
-        return (int)value;
     }
 }
