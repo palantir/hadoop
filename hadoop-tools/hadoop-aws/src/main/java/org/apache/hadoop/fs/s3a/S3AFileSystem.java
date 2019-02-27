@@ -391,6 +391,7 @@ public class S3AFileSystem extends FileSystem {
     } catch (AmazonClientException e) {
       throw translateException("initializing ", new Path(name), e);
     }
+
   }
 
   /**
