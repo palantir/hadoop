@@ -1,12 +1,15 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
-import com.google.common.collect.Lists;
-import com.google.common.util.concurrent.*;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.ListeningExecutorService;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -35,7 +38,7 @@ public final class MultipartDownloader implements S3Downloader {
 
         final OrderingQueue orderingQueue = new OrderingQueue(rangeStart, size, bufferSize);
 
-        final List<ListenableFuture<?>> partFutures = Lists.newArrayList();
+        final List<ListenableFuture<?>> partFutures = new ArrayList<>(numParts);
         final AtomicBoolean isAbort = new AtomicBoolean();
 
         for (long i = 0; i < numParts; i++) {

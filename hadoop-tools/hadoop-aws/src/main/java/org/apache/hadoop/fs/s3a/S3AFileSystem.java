@@ -312,17 +312,18 @@ public class S3AFileSystem extends FileSystem {
         }
       };
 
+
       boolean multipartDownloadEnabled = conf.getBoolean(MULTIPART_DOWNLOAD_ENABLED, DEFAULT_MULTIPART_DOWNLOAD_ENABLED);
       if (multipartDownloadEnabled) {
         ExecutorService downloadExecutorService = Executors.newFixedThreadPool(
                 intOption(conf, MULTIPART_DOWNLOAD_NUM_THREADS, DEFAULT_MULTIPART_DOWNLOAD_NUM_THREADS, 0),
                 new ThreadFactoryBuilder().setNameFormat("multipart-download-%d").build());
         this.s3Downloader = new MultipartDownloader(
-                longOption(conf, MULTIPART_DOWNLOAD_PART_SIZE, DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE, 0),
+                conf.getLongBytes(MULTIPART_DOWNLOAD_PART_SIZE, DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE),
                 MoreExecutors.listeningDecorator(downloadExecutorService),
                 rawS3Downloader,
-                longOption(conf, MULTIPART_DOWNLOAD_CHUNK_SIZE, DEFAULT_MULTIPART_DOWNLOAD_CHUNK_SIZE, 0),
-                longOption(conf, MULTIPART_DOWNLOAD_BUFFER_SIZE, DEFAULT_MULTIPART_DOWNLOAD_BUFFER_SIZE, 0));
+                conf.getLongBytes(MULTIPART_DOWNLOAD_CHUNK_SIZE, DEFAULT_MULTIPART_DOWNLOAD_CHUNK_SIZE),
+                conf.getLongBytes(MULTIPART_DOWNLOAD_BUFFER_SIZE, DEFAULT_MULTIPART_DOWNLOAD_BUFFER_SIZE));
       } else {
         this.s3Downloader = rawS3Downloader;
       }
