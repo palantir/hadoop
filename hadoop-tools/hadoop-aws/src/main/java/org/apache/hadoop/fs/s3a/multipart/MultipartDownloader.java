@@ -1,5 +1,6 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
@@ -24,6 +25,12 @@ public final class MultipartDownloader implements S3Downloader {
     private final long bufferSize;
 
     public MultipartDownloader(long partSize, ListeningExecutorService downloadExecutorService, S3Downloader partDownloader, long chunkSize, long bufferSize) {
+        Preconditions.checkArgument(partSize > 0);
+        Preconditions.checkArgument(chunkSize > 0);
+        Preconditions.checkArgument(bufferSize > 0);
+        Preconditions.checkArgument(chunkSize <= bufferSize);
+        Preconditions.checkArgument(chunkSize <= partSize);
+
         this.partSize = partSize;
         this.downloadExecutorService = downloadExecutorService;
         this.partDownloader = partDownloader;
@@ -33,6 +40,9 @@ public final class MultipartDownloader implements S3Downloader {
 
     @Override
     public AbortableInputStream download(final String bucket, final String key, long rangeStart, long rangeEnd) {
+        Preconditions.checkArgument(rangeEnd > rangeStart, "Range end must be larger than range start");
+        Preconditions.checkArgument(rangeStart >= 0, "Range end must be non-negative");
+
         final long size = rangeEnd - rangeStart;
         int numParts = (int) Math.ceil((double) size / partSize);
 
