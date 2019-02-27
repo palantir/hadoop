@@ -4,6 +4,7 @@ import com.google.common.base.Charsets;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.commons.io.IOUtils;
+import org.apache.hadoop.fs.contract.ContractTestUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -17,9 +18,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-public class MultipartDownloaderTest {
+public final class MultipartDownloaderTest {
 
-    private final byte[] bytes = generateBytes(0, 1000);
+    private final byte[] bytes = ContractTestUtils.dataset(1000, 0, 1000);
 
     private final MultipartDownloader multipartDownloader = new MultipartDownloader(
             100,
@@ -159,14 +160,5 @@ public class MultipartDownloaderTest {
         Assert.assertArrayEquals(
                 Arrays.copyOfRange(bytes, from, to),
                 IOUtils.toByteArray(multipartDownloader.download("bucket", "key",  from, to)));
-    }
-
-    private byte[] generateBytes(int from, int to) {
-        StringBuilder stringBuilder = new StringBuilder();
-        for (int i = from; i < to; i++) {
-            stringBuilder.append(i);
-            stringBuilder.append("\n");
-        }
-        return stringBuilder.toString().getBytes(Charsets.UTF_8);
     }
 }
