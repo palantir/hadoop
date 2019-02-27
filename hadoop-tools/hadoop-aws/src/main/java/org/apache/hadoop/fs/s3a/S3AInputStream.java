@@ -35,7 +35,7 @@ import java.io.EOFException;
 import java.io.IOException;
 
 import static org.apache.commons.lang.StringUtils.isNotEmpty;
-import static org.apache.hadoop.fs.s3a.S3AUtils.translateException;
+import static org.apache.hadoop.fs.s3a.S3AUtils.*;
 
 /**
  * The input stream for an S3A object.
