@@ -1,16 +1,17 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
-import com.google.common.base.Charsets;
 import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import org.apache.commons.io.IOUtils;
 import org.apache.hadoop.fs.contract.ContractTestUtils;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -22,9 +23,11 @@ public final class MultipartDownloaderTest {
 
     private final byte[] bytes = ContractTestUtils.dataset(1000, 0, 1000);
 
+    private final ListeningExecutorService executorService = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(2));
+
     private final MultipartDownloader multipartDownloader = new MultipartDownloader(
             100,
-            MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(2)),
+            executorService,
             new S3Downloader() {
                 @Override
                 public AbortableInputStream download(String bucket, String key, long rangeStart, long rangeEnd) {
@@ -45,6 +48,11 @@ public final class MultipartDownloaderTest {
             10,
             1000);
 
+    @After
+    public void after() {
+        executorService.shutdownNow();
+    }
+
     @Test
     public void testDownloadAll() throws IOException {
         assertDownloadRange(0, bytes.length);
@@ -62,6 +70,8 @@ public final class MultipartDownloaderTest {
 
     @Test
     public void testCancelPartsIfFailure() throws InterruptedException {
+        final CountDownLatch interrupted = new CountDownLatch(1);
+        final CountDownLatch blockForever = new CountDownLatch(1);
         S3Downloader partDownloader = new S3Downloader() {
             @Override
             public AbortableInputStream download(String bucket, String key, long rangeStart, long rangeEnd) {
@@ -77,11 +87,11 @@ public final class MultipartDownloaderTest {
                         @Override
                         public int read() {
                             try {
-                                Thread.sleep(1000000000);
-                                return -1;
+                                blockForever.await();
                             } catch (InterruptedException e) {
-                                throw new RuntimeException(e);
+                                interrupted.countDown();
                             }
+                            return -1;
                         }
                     };
                 }
@@ -91,8 +101,7 @@ public final class MultipartDownloaderTest {
         MultipartDownloader multipartDownloader = new MultipartDownloader(100, executorService, partDownloader, 10, 1000);
         multipartDownloader.download("bucket", "key", 0, 1000);
 
-        executorService.shutdown();
-        assertTrue(executorService.awaitTermination(1, TimeUnit.SECONDS));
+        assertTrue(interrupted.await(1, TimeUnit.SECONDS));
     }
 
     @Test
@@ -108,6 +117,8 @@ public final class MultipartDownloaderTest {
     private void testCompletion(boolean checkAborted) throws IOException, InterruptedException {
         final AtomicBoolean closed = new AtomicBoolean();
         final AtomicBoolean aborted = new AtomicBoolean();
+        final CountDownLatch interrupted = new CountDownLatch(1);
+        final CountDownLatch blockForever = new CountDownLatch(1);
 
         S3Downloader partDownloader = new S3Downloader() {
             @Override
@@ -121,11 +132,11 @@ public final class MultipartDownloaderTest {
                     @Override
                     public int read() {
                         try {
-                            Thread.sleep(1000000000);
-                            return -1;
+                            blockForever.await();
                         } catch (InterruptedException e) {
-                            throw new RuntimeException(e);
+                            interrupted.countDown();
                         }
+                        return -1;
                     }
 
                     @Override
@@ -144,8 +155,8 @@ public final class MultipartDownloaderTest {
             download.close();
         }
 
-        executorService.shutdown();
-        assertTrue(executorService.awaitTermination(1, TimeUnit.SECONDS));
+        assertTrue(interrupted.await(1, TimeUnit.SECONDS));
+
         if (checkAborted) {
             assertFalse(closed.get());
             assertTrue(aborted.get());

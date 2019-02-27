@@ -1,5 +1,6 @@
 package org.apache.hadoop.fs.s3a.multipart;
 
+import org.junit.AfterClass;
 import org.junit.Test;
 
 import java.util.concurrent.CountDownLatch;
@@ -12,6 +13,11 @@ import static org.junit.Assert.*;
 public class OrderingQueueTest {
 
     private static final ExecutorService executorService = Executors.newCachedThreadPool();
+
+    @AfterClass
+    public static void after() {
+        executorService.shutdownNow();
+    }
 
     @Test
     public void testPopBlocksForNextOffset() throws InterruptedException {
@@ -73,65 +79,66 @@ public class OrderingQueueTest {
     }
 
     @Test
-    public void testCanCloseWithException() throws InterruptedException {
-        final OrderingQueue orderingQueue = new OrderingQueue(0, 20, 10);
-
-        final CountDownLatch blockedWriteCaughtException = new CountDownLatch(1);
-        final CountDownLatch blockedReadCaughtException = new CountDownLatch(1);
-
-        final RuntimeException myException = new RuntimeException("My Exception");
-
-        orderingQueue.push(0, new byte[5]);
-        executorService.submit(new Runnable() {
+    public void testCloseDeliversExceptionToBlockedPush() throws InterruptedException {
+        testCloseDeliversExceptionToBlockedCall(new Consumer<OrderingQueue>() {
             @Override
-            public void run() {
+            public void consume(OrderingQueue orderingQueue) {
                 try {
                     orderingQueue.push(5, new byte[6]);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
-                } catch (RuntimeException e) {
-                    if (e.equals(myException)) {
-                        blockedWriteCaughtException.countDown();
-                    }
                 }
             }
         });
+    }
+
+    @Test
+    public void testCloseDeliversExceptionToBlockedPop() throws InterruptedException {
+        testCloseDeliversExceptionToBlockedCall(new Consumer<OrderingQueue>() {
+            @Override
+            public void consume(OrderingQueue orderingQueue) {
+                try {
+                    orderingQueue.popInOrder();
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        });
+    }
+
+    private void testCloseDeliversExceptionToBlockedCall(final Consumer<OrderingQueue> consumer) throws InterruptedException {
+        final OrderingQueue orderingQueue = new OrderingQueue(0, 20, 10);
+        final CountDownLatch deliveredException = new CountDownLatch(1);
+        final RuntimeException myException = new RuntimeException("My Exception");
 
         executorService.submit(new Runnable() {
             @Override
             public void run() {
                 try {
-                    orderingQueue.popInOrder();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
+                    consumer.consume(orderingQueue);
                 } catch (RuntimeException e) {
                     if (e.equals(myException)) {
-                        blockedReadCaughtException.countDown();
+                        deliveredException.countDown();
                     }
                 }
             }
         });
 
-        assertFalse(blockedReadCaughtException.await(1, TimeUnit.SECONDS));
-        assertFalse(blockedWriteCaughtException.await(1, TimeUnit.SECONDS));
-
+        assertFalse(deliveredException.await(1, TimeUnit.SECONDS));
         orderingQueue.closeWithException(myException);
-
-        assertTrue(blockedReadCaughtException.await(1, TimeUnit.SECONDS));
-        assertTrue(blockedWriteCaughtException.await(1, TimeUnit.SECONDS));
+        assertTrue(deliveredException.await(1, TimeUnit.SECONDS));
 
         try {
-            orderingQueue.push(0, new byte[11]);
+            consumer.consume(orderingQueue);
             fail();
         } catch (RuntimeException e) {
             assertEquals(myException, e);
         }
+    }
 
-        try {
-            orderingQueue.popInOrder();
-            fail();
-        } catch (RuntimeException e) {
-            assertEquals(myException, e);
-        }
+    interface Consumer<T> {
+
+        void consume(T t);
+
     }
 }
