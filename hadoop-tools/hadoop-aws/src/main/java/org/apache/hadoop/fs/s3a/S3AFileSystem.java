@@ -1324,7 +1324,7 @@ public class S3AFileSystem extends FileSystem {
    * PUT an object directly (i.e. not via the transfer manager).
    * Byte length is calculated from the file length, or, if there is no
    * file, from the content length of the header.
-   * <i>Important: this call will propagateException any input stream in the request.</i>
+   * <i>Important: this call will close any input stream in the request.</i>
    * @param putObjectRequest the request
    * @return the upload initiated
    * @throws AmazonClientException on problems
@@ -1364,7 +1364,7 @@ public class S3AFileSystem extends FileSystem {
   /**
    * Upload part of a multi-partition file.
    * Increments the write and put counters.
-   * <i>Important: this call does not propagateException any input stream in the request.</i>
+   * <i>Important: this call does not close any input stream in the request.</i>
    * @param request request
    * @return the result of the operation.
    * @throws AmazonClientException on problems
