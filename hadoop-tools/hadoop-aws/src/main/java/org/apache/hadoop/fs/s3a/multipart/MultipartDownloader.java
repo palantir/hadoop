@@ -4,8 +4,8 @@ import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.ListeningExecutorService;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -15,7 +15,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class MultipartDownloader implements S3Downloader {
-    private static final Log LOG = LogFactory.getLog(MultipartDownloader.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MultipartDownloader.class);
 
     private final long partSize;
     private final ListeningExecutorService downloadExecutorService;
@@ -48,7 +48,7 @@ public final class MultipartDownloader implements S3Downloader {
             ListenableFuture<?> partFuture = downloadExecutorService.submit(new Runnable() {
                 @Override
                 public void run() {
-                    LOG.info(String.format("Downloading part %d - %d", partRangeStart, partRangeEnd));
+                    LOG.info("Downloading part {} - {}", partRangeStart, partRangeEnd);
                     // Since the parts should be small, we should be able to just close the streams instead of abort.
                     // try-with-resources will call close when we get interrupted
                     AbortableInputStream abortableInputStream = partDownloader.download(bucket, key, partRangeStart, partRangeEnd);
@@ -57,12 +57,12 @@ public final class MultipartDownloader implements S3Downloader {
                         long currentOffset = partRangeStart;
                         while (currentOffset < partRangeEnd) {
                             long bytesLeft = partRangeEnd - currentOffset;
-                            long bytesToRead = bytesLeft > chunkSize ? chunkSize : bytesLeft;
+                            int bytesToRead = toIntExact(bytesLeft > chunkSize ? chunkSize : bytesLeft);
 
-                            byte[] chunk = new byte[(int) bytesToRead];
+                            byte[] chunk = new byte[bytesToRead];
                             dataInputStream.readFully(chunk);
 
-                            LOG.debug("Pushing offset: " + currentOffset);
+                            LOG.debug("Pushing offset: {}", currentOffset);
                             orderingQueue.push(currentOffset, chunk);
                             currentOffset += chunk.length;
                         }
@@ -147,4 +147,15 @@ public final class MultipartDownloader implements S3Downloader {
         }
     }
 
+    /**
+     * Copied from Math#toIntExact from Java 7.
+     * @param value
+     * @return
+     */
+    private static int toIntExact(long value) {
+        if ((int)value != value) {
+            throw new ArithmeticException("integer overflow");
+        }
+        return (int)value;
+    }
 }
