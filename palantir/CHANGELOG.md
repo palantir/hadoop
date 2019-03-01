@@ -1,4 +1,4 @@
-# 2.9.2-palantir.3
+# 2.9.2-palantir.4
 
 Based on Apache Hadoop tag `release-2.9.2-RC0`.
 
@@ -10,7 +10,7 @@ Based on Apache Hadoop tag `release-2.9.2-RC0`.
 * Backport log-level changes to S3AFileSystem#deleteObjects from [HADOOP-15176](https://issues.apache.org/jira/browse/HADOOP-15176)
 * Initial implementation of [HADOOP-16132](https://issues.apache.org/jira/browse/HADOOP-16132)
 
-# 2.9.2-palantir.2
+# 2.9.2-palantir.3
 
 Based on Apache Hadoop tag `release-2.9.2-RC0`.
 
