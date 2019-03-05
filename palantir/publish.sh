@@ -19,7 +19,7 @@ sed -i "s/<hadoop\.version>3\.2\.0/<hadoop\.version>$version/g" pom.xml
 mvn -e --settings $tmp_settings source:jar -DskipTests deploy | grep -v 'Progress'
 
 # Publish a dist to Bintray
-mvn -e package -Pdist,native,src -DskipTests -Dmaven.javadoc.skip=true -Dtar | grep -v 'Progress'
+mvn -e package -Pdist,native,src,yarn-ui -DskipTests -Dmaven.javadoc.skip=true -Dtar | grep -v 'Progress'
 curl -u $BINTRAY_USERNAME:$BINTRAY_PASSWORD -T hadoop-dist/target/hadoop-${version}.tar.gz "https://api.bintray.com/content/palantir/releases/hadoop/${version}/org/apache/hadoop/hadoop-dist/${version}/${file_name}"
 
 # Tell Bintray to publish the artifacts for this release
