@@ -375,14 +375,16 @@ public class S3AFileSystem extends FileSystem {
 
       boolean multipartDownloadEnabled = conf.getBoolean(MULTIPART_DOWNLOAD_ENABLED, DEFAULT_MULTIPART_DOWNLOAD_ENABLED);
       if (multipartDownloadEnabled) {
-        ExecutorService downloadExecutorService = new ThreadPoolExecutor(
-            0,
-            intOption(conf, MULTIPART_DOWNLOAD_NUM_THREADS, DEFAULT_MULTIPART_DOWNLOAD_NUM_THREADS, 0),
+        int multipartDownloadNumThreads = intOption(conf, MULTIPART_DOWNLOAD_NUM_THREADS, DEFAULT_MULTIPART_DOWNLOAD_NUM_THREADS, 0);
+        ThreadPoolExecutor downloadExecutorService = new ThreadPoolExecutor(
+            multipartDownloadNumThreads,
+            multipartDownloadNumThreads,
             keepAliveTime,
             TimeUnit.SECONDS,
             new LinkedBlockingQueue<Runnable>(),
             BlockingThreadPoolExecutorService.newDaemonThreadFactory(
                 "s3a-multipart-download"));
+        downloadExecutorService.allowCoreThreadTimeOut(true);
         this.s3Downloader = new MultipartDownloader(
                 conf.getLongBytes(MULTIPART_DOWNLOAD_PART_SIZE, DEFAULT_MULTIPART_DOWNLOAD_PART_SIZE),
                 MoreExecutors.listeningDecorator(downloadExecutorService),
