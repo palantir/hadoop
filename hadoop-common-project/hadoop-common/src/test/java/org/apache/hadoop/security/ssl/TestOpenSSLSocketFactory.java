@@ -51,7 +51,12 @@ public class TestOpenSSLSocketFactory {
             System.getProperty("java.version").startsWith("1.8"));
     OpenSSLSocketFactory.initializeDefaultFactory(
             OpenSSLSocketFactory.SSLChannelMode.Default_JSSE);
-    assertThat(Arrays.stream(OpenSSLSocketFactory.getDefaultFactory()
-            .getSupportedCipherSuites())).noneMatch("GCM"::contains);
+    boolean isGcmSupported = false;
+    for (String cipherSuite : OpenSSLSocketFactory.getDefaultFactory().getSupportedCipherSuites()) {
+      if (cipherSuite.contains("GCM")) {
+        isGcmSupported = true;
+      }
+    }
+    assertThat(!isGcmSupported);
   }
 }
