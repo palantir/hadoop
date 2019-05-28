@@ -137,6 +137,8 @@
     <!-- the version of Hadoop declared in the version resources; can be overridden
     so that Hadoop 3.x can declare itself a 2.x artifact. -->
     <declared.hadoop.version>${project.version}</declared.hadoop.version>
+
+    <assertj.version>3.12.2</assertj.version>
   </properties>
 
   <dependencyManagement>
@@ -1077,6 +1079,12 @@
       </dependency>
 
       <dependency>
+        <groupId>org.wildfly.openssl</groupId>
+        <artifactId>wildfly-openssl</artifactId>
+        <version>1.0.4.Final</version>
+      </dependency>
+
+      <dependency>
         <groupId>org.apache.directory.server</groupId>
         <artifactId>apacheds-kerberos-codec</artifactId>
         <version>2.0.0-M15</version>
@@ -1255,6 +1263,12 @@
             <groupId>jdk.tools</groupId>
           </exclusion>
         </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>org.assertj</groupId>
+        <artifactId>assertj-core</artifactId>
+        <version>${assertj.version}</version>
+        <scope>test</scope>
       </dependency>
     </dependencies>
   </dependencyManagement>
