@@ -41,7 +41,6 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.YarnUncaughtExceptionHandler;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
-import org.apache.hadoop.yarn.logaggregation.AggregatedLogDeletionService;
 import org.apache.hadoop.yarn.server.applicationhistoryservice.webapp.AHSWebApp;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.apache.hadoop.yarn.server.timeline.LeveldbTimelineStore;
@@ -71,7 +70,6 @@ public class ApplicationHistoryServer extends CompositeService {
   private static final Logger LOG = LoggerFactory
     .getLogger(ApplicationHistoryServer.class);
 
-  private AggregatedLogDeletionService aggregatedLogDeletionService;
   private ApplicationHistoryClientService ahsClientService;
   private ApplicationACLsManager aclsManager;
   private ApplicationHistoryManager historyManager;
@@ -101,8 +99,6 @@ public class ApplicationHistoryServer extends CompositeService {
     addService(secretManagerService);
     timelineDataManager = createTimelineDataManager(conf);
     addService(timelineDataManager);
-    aggregatedLogDeletionService = new AggregatedLogDeletionService();
-    addService(aggregatedLogDeletionService);
 
     // init generic history service afterwards
     aclsManager = createApplicationACLsManager(conf);
