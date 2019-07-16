@@ -14,7 +14,6 @@ Based on Apache Hadoop tag `release-2.9.2-RC0`.
 * Backport [HADOOP-11858](https://issues.apache.org/jira/browse/HADOOP-11858)
 * Manual backport of [HADOOP-15938](https://issues.apache.org/jira/browse/HADOOP-15938)
 * Comment out s3guard quantile creation in S3AInstrumentation as more aggressive version of [HADOOP-16278](https://issues.apache.org/jira/browse/HADOOP-16278)
-* Initial patch for [YARN-2985](https://issues.apache.org/jira/browse/YARN-2985)
 
 # 2.9.2-palantir.8
 
