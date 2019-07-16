@@ -179,8 +179,9 @@ public class S3AInstrumentation {
       gauge(statistic.getSymbol(), statistic.getDescription());
     }
     //todo need a config for the quantiles interval?
-    quantiles(S3GUARD_METADATASTORE_PUT_PATH_LATENCY,
-        "ops", "latency", 1);
+    // palantir-hadoop only: commented out because HADOOP-16278 and we're not using s3guard
+    //quantiles(S3GUARD_METADATASTORE_PUT_PATH_LATENCY,
+    //    "ops", "latency", 1);
   }
 
   /**
