@@ -120,7 +120,7 @@ RUN wget http://www-eu.apache.org/dist/maven/maven-3/3.5.4/binaries/apache-maven
   && mvn --version
 
 # INSTALL CMAKE
-RUN curl -LO http://www.cmake.org/files/v3.1/cmake-3.1.3.tar.gz \
+RUN curl -kLO http://www.cmake.org/files/v3.1/cmake-3.1.3.tar.gz \
   && tar xfz cmake-*.tar.gz && rm *.tar.gz \
   && cd cmake* \
   && ./bootstrap \

@@ -115,19 +115,19 @@ jobs:
           command: |
             case $CIRCLE_NODE_INDEX in
               0)
-                cd hadoop-common-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+                cd hadoop-common-project && mvn test --fail-never
                 ;;
               1)
-                cd hadoop-hdfs-project && mvn test --fail-never -pl '!hadoop-hdfs' | grep -v "ignoring option MaxPermSize"
+                cd hadoop-hdfs-project && mvn test --fail-never
                 ;;
               2)
-                cd hadoop-mapreduce-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+                cd hadoop-mapreduce-project && mvn test --fail-never
                 ;;
               3)
-                cd hadoop-tools && mvn test --fail-never -pl '!hadoop-openstack','!hadoop-gridmix','!hadoop-archive-logs' | grep -v "ignoring option MaxPermSize"
+                cd hadoop-tools && mvn test --fail-never
                 ;;
               4)
-                cd hadoop-yarn-project && mvn test --fail-never | grep -v "ignoring option MaxPermSize"
+                cd hadoop-yarn-project && mvn test --fail-never
                 ;;
             esac
           no_output_timeout: 15m
