@@ -1,4 +1,4 @@
-# 3.2.0-palantir.11
+# 3.2.0-palantir.13
 
 Based on Apache Hadoop tag `release-3.2.0-RC1`.
 
