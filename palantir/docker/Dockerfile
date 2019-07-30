@@ -23,6 +23,10 @@ RUN echo 'APT::Get::Assume-Yes "true";' > /etc/apt/apt.conf.d/90circleci \
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Prepare to install Zulu jdk11
+RUN apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 0xB1998361219BD9C9 \
+  && echo 'deb http://repos.azulsystems.com/debian stable main' > /etc/apt/sources.list.d/zulu.list
+
 # man directory is missing in some base images
 # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=863199
 RUN mkdir -p /usr/share/man/man1 \
@@ -31,13 +35,13 @@ RUN mkdir -p /usr/share/man/man1 \
     git \
     locales sudo openssh-client ca-certificates tar gzip parallel \
     net-tools netcat unzip zip bzip2 gnupg curl wget \
-    openjdk-8-jdk rsync \
+    zulu-11 rsync \
     libboost-dev libboost-test-dev libboost-program-options-dev \
     flex bison pkg-config cmake libsasl2-dev \
   && rm -rf /var/lib/apt/lists/*
 
 # If you update java, make sure this aligns
-ENV JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+ENV JAVA_HOME=/usr/lib/jvm/zulu-11-amd64/
 
 # Set timezone to UTC by default
 RUN ln -sf /usr/share/zoneinfo/Etc/UTC /etc/localtime
@@ -99,7 +103,7 @@ RUN groupadd --gid 3434 circleci \
 SHELL ["/bin/bash", "-eux", "-o", "pipefail", "-c"]
 
 # INSTALL PROTOC
-RUN curl -LO "https://github.com/protocolbuffers/protobuf/releases/download/v2.5.0/protobuf-2.5.0.tar.bz2" \
+RUN curl -kLO "https://github.com/protocolbuffers/protobuf/releases/download/v2.5.0/protobuf-2.5.0.tar.bz2" \
   && tar -xf protobuf-*.tar.bz2 \
   && cd protobuf-2.5.0 \
   && ./configure \
