@@ -95,7 +95,7 @@ jobs:
     steps:
       - *checkout-code
       - *restore-maven-dependency-cache
-      - run: mvn -T1C -B -DskipTests install
+      - run: mvn -T1C -B -DskipTests install -Pnative
       - save_cache:
           key: maven-dependency-cache-{{ checksum "pom.xml" }}
           paths:
