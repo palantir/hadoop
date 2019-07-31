@@ -118,7 +118,7 @@ jobs:
                 cd hadoop-common-project && mvn test --fail-never
                 ;;
               1)
-                cd hadoop-hdfs-project && mvn test --fail-never
+                cd hadoop-hdfs-project && mvn test --fail-never -pl '!hadoop-hdfs'
                 ;;
               2)
                 cd hadoop-mapreduce-project && mvn test --fail-never
