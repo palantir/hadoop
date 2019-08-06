@@ -1912,13 +1912,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
-  @Override
-  public boolean isLogAggregationEnabled() {
-    return logAggregationEnabled;
-  }
-
-  @Override
-  public boolean isLogAggregationFinished() {
+  private boolean isLogAggregationFinished() {
     return this.logAggregationStatusForAppReport
       .equals(LogAggregationStatus.SUCCEEDED)
         || this.logAggregationStatusForAppReport
