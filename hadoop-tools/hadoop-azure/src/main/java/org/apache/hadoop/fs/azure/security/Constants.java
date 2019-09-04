@@ -45,6 +45,8 @@ public final class Constants {
   public static final String AUTHENTICATION_FAILED_ERROR_MESSAGE =
       "Authentication Failed ";
 
+  public static final String SSL_CHANNEL_MODE = "fs.azure.ssl.channel.mode";
+
   private Constants() {
   }
 }

@@ -1134,7 +1134,13 @@
         <groupId>com.microsoft.azure</groupId>
         <artifactId>azure-storage</artifactId>
         <version>5.4.0</version>
-    </dependency>
+      </dependency>
+
+      <dependency>
+        <groupId>org.wildfly.openssl</groupId>
+        <artifactId>wildfly-openssl</artifactId>
+        <version>1.0.7.Final</version>
+      </dependency>
       
      <dependency>
         <groupId>joda-time</groupId>
