@@ -54,6 +54,7 @@ import org.apache.hadoop.fs.azure.metrics.AzureFileSystemInstrumentation;
 import org.apache.hadoop.fs.azure.metrics.BandwidthGaugeUpdater;
 import org.apache.hadoop.fs.azure.metrics.ErrorMetricUpdater;
 import org.apache.hadoop.fs.azure.metrics.ResponseReceivedMetricUpdater;
+import org.apache.hadoop.fs.azure.security.AzureSSLSocketFactory;
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.fs.permission.PermissionStatus;
 import org.apache.hadoop.io.IOUtils;
@@ -85,6 +86,8 @@ import com.microsoft.azure.storage.blob.CopyStatus;
 import com.microsoft.azure.storage.blob.DeleteSnapshotsOption;
 import com.microsoft.azure.storage.blob.ListBlobItem;
 import com.microsoft.azure.storage.core.Utility;
+
+import javax.net.ssl.HttpsURLConnection;
 
 /**
  * Core implementation of Windows Azure Filesystem for Hadoop.
@@ -2002,6 +2005,17 @@ public class AzureNativeFileSystemStore implements NativeFileSystemStore {
         String userAgentInfo = String.format(Utility.LOCALE_US, "WASB/%s (%s) %s",
                 VersionInfo.getVersion(), userAgentId, BaseRequest.getUserAgent());
         connection.setRequestProperty(Constants.HeaderConstants.USER_AGENT, userAgentInfo);
+
+        if (getHTTPScheme().equals(HTTPS_SCHEME)) {
+          try {
+            String channelMode = sessionConfiguration.get(
+                    org.apache.hadoop.fs.azure.security.Constants.SSL_CHANNEL_MODE, "Default");
+            AzureSSLSocketFactory.initializeDefaultFactory(AzureSSLSocketFactory.SSLChannelMode.valueOf(channelMode));
+            ((HttpsURLConnection) connection).setSSLSocketFactory(AzureSSLSocketFactory.getDefaultFactory());
+          } catch (IOException e) {
+            throw new RuntimeException("Failed to create SSLSocketFactory", e);
+          }
+        }
       }
     });
 
