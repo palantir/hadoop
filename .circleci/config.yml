@@ -168,5 +168,5 @@ workflows:
           <<: *all-branches-and-tags
       - deploy:
           requires:
-            - run-tests
+            - build-maven
           <<: *deployable-branches-and-tags
