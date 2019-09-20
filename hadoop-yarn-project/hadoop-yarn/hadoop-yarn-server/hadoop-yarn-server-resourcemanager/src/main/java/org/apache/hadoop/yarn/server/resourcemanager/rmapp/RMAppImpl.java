@@ -1740,10 +1740,6 @@ public class RMAppImpl implements RMApp, Recoverable {
     logAggregation.aggregateLogReport(nodeId, report, this);
   }
 
-  public boolean isLogAggregationFinished() {
-    return logAggregation.isFinished();
-  }
-
   public String getLogAggregationFailureMessagesForNM(NodeId nodeId) {
     return logAggregation.getLogAggregationFailureMessagesForNM(nodeId);
   }

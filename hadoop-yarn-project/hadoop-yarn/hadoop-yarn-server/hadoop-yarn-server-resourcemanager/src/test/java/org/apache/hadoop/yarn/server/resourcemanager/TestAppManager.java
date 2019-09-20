@@ -130,7 +130,7 @@ public class TestAppManager extends AppManagerTestBase{
   } 
 
 
-  public static List<RMApp> newRMApps(int n, long time, RMAppState state) {
+  private static List<RMApp> newRMApps(int n, long time, RMAppState state) {
     List<RMApp> list = Lists.newArrayList();
     for (int i = 0; i < n; ++i) {
       list.add(new MockRMApp(i, time, state));
@@ -198,7 +198,7 @@ public class TestAppManager extends AppManagerTestBase{
   protected void addToCompletedApps(TestRMAppManager appMonitor, RMContext rmContext) {
     for (RMApp app : rmContext.getRMApps().values()) {
       if (app.getState() == RMAppState.FINISHED
-          || app.getState() == RMAppState.KILLED 
+          || app.getState() == RMAppState.KILLED
           || app.getState() == RMAppState.FAILED) {
         appMonitor.finishApplication(app.getApplicationId());
       }
