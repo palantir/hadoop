@@ -194,45 +194,6 @@ public class TestAppManager extends AppManagerTestBase{
       System.out.println("in handle routine " + getAppEventType().toString());
     }   
   }
-  
-
-  // Extend and make the functions we want to test public
-  public class TestRMAppManager extends RMAppManager {
-
-    public TestRMAppManager(RMContext context, Configuration conf) {
-      super(context, null, null, new ApplicationACLsManager(conf), conf);
-    }
-
-    public TestRMAppManager(RMContext context,
-        ClientToAMTokenSecretManagerInRM clientToAMSecretManager,
-        YarnScheduler scheduler, ApplicationMasterService masterService,
-        ApplicationACLsManager applicationACLsManager, Configuration conf) {
-      super(context, scheduler, masterService, applicationACLsManager, conf);
-    }
-
-    public void checkAppNumCompletedLimit() {
-      super.checkAppNumCompletedLimit();
-    }
-
-    public void finishApplication(ApplicationId appId) {
-      super.finishApplication(appId);
-    }
-
-    public int getCompletedAppsListSize() {
-      return super.getCompletedAppsListSize();
-    }
-
-    public int getCompletedAppsInStateStore() {
-      return this.completedAppsInStateStore;
-    }
-
-    public void submitApplication(
-        ApplicationSubmissionContext submissionContext, String user)
-            throws YarnException, IOException {
-      super.submitApplication(submissionContext, System.currentTimeMillis(),
-        user);
-    }
-  }
 
   protected void addToCompletedApps(TestRMAppManager appMonitor, RMContext rmContext) {
     for (RMApp app : rmContext.getRMApps().values()) {
@@ -654,7 +615,7 @@ public class TestAppManager extends AppManagerTestBase{
     verify(rmContext.getStateStore(), times(numRemoveAppsFromStateStore))
       .removeApplication(isA(RMApp.class));
     Assert.assertEquals(maxAppsInStateStore,
-      appMonitor.getCompletedAppsInStateStore());
+      appMonitor.getNumberOfCompletedAppsInStateStore());
   }
 
   @Test
@@ -681,7 +642,7 @@ public class TestAppManager extends AppManagerTestBase{
     verify(rmContext.getStateStore(), times(numRemoveApps)).removeApplication(
       isA(RMApp.class));
     Assert.assertEquals(maxAppsInMemory,
-      appMonitor.getCompletedAppsInStateStore());
+      appMonitor.getNumberOfCompletedAppsInStateStore());
   }
 
   protected void setupDispatcher(RMContext rmContext, Configuration conf) {
