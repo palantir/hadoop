@@ -75,28 +75,6 @@ public class AppManagerTestBase {
       return this.completedAppsInStateStore;
     }
 
-    public List<ApplicationId> getCompletedApps() {
-      return completedApps;
-    }
-
-    public Set<ApplicationId> getFirstNCompletedApps(int n) {
-      return getCompletedApps().stream().limit(n).collect(toSet());
-    }
-
-    public Set<ApplicationId> getCompletedAppsWithEvenIdsInRange(int n) {
-      return getCompletedApps().stream().limit(n)
-          .filter(app -> app.getId() % 2 == 0).collect(toSet());
-    }
-
-    public Set<ApplicationId> getRemovedAppsFromStateStore(int numRemoves) {
-      ArgumentCaptor<RMApp> argumentCaptor =
-          ArgumentCaptor.forClass(RMApp.class);
-      verify(stateStore, times(numRemoves))
-          .removeApplication(argumentCaptor.capture());
-      return argumentCaptor.getAllValues().stream().map(RMApp::getApplicationId)
-          .collect(toSet());
-    }
-
     public void submitApplication(
         ApplicationSubmissionContext submissionContext, String user)
         throws YarnException {
