@@ -204,6 +204,12 @@ class FSPreemptionThread extends Thread {
     for (RMContainer container : containersToCheck) {
       FSAppAttempt app =
           scheduler.getSchedulerApp(container.getApplicationAttemptId());
+
+      // Don't NPE if this app is already finished
+      if (app == null) {
+        continue;
+      }
+
       ApplicationId appId = app.getApplicationId();
 
       if (app.canContainerBePreempted(container,
