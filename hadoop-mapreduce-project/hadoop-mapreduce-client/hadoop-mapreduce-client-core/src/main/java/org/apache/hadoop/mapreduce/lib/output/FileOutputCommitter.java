@@ -507,7 +507,10 @@ public class FileOutputCommitter extends OutputCommitter {
       // deleted by previous AM, we should tolerate FileNotFoundException in
       // this case.
       try {
-        fs.delete(pendingJobAttemptsPath, true);
+        if (!fs.delete(pendingJobAttemptsPath, true)) {
+          throw new IOException("Failed to cleanup "
+              + pendingJobAttemptsPath);
+        }
       } catch (FileNotFoundException e) {
         if (!isCommitJobRepeatable(context)) {
           throw e;
