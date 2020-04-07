@@ -301,8 +301,10 @@ public class AdlFileSystem extends FileSystem {
   }
 
   private AccessTokenProvider getMsiBasedTokenProvider(
-          Configuration conf) throws IOException {
-    return new MsiTokenProvider(conf.getInt(MSI_PORT, -1));
+          Configuration conf) {
+    String tenantId = conf.get(MSI_AZURE_AD_TENANT_ID_KEY);
+    String clientId = conf.get(AZURE_AD_CLIENT_ID_KEY);
+    return new MsiTokenProvider(tenantId, clientId);
   }
 
   private AccessTokenProvider getDeviceCodeTokenProvider(

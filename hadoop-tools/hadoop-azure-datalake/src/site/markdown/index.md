@@ -165,11 +165,11 @@ Identity extension within the VM. The advantage of doing this is that the
 credentials are managed by the extension, and do not have to be put into
 core-site.xml.
 
-To use MSI, modify the VM deployment template to use the identity extension. Note the
-port number you specified in the template: this is the port number for the REST endpoint
-of the token service exposed to localhost by the identity extension in the VM. The default
-recommended port number is 50342 - if the recommended port number is used, then the msi.port
-setting below can be omitted in the configuration.
+To use MSI, modify the VM deployment template to use the identity extension. You
+may optionally provide a client_id to instruct Hadoop to authenticate using
+a particlar MSI in case there is more than one MSI attached to the VM. You may
+optionally provide a tenant_id to specify the Azure AD tenant to authenticate
+against.
 
 ##### Configure core-site.xml
 Add the following properties to your `core-site.xml`
@@ -181,9 +181,15 @@ Add the following properties to your `core-site.xml`
 </property>
 
 <property>
-  <name>fs.adl.oauth2.msi.port</name>
-  <value>PORT NUMBER FROM ABOVE (if different from the default of 50342)</value>
+  <name>fs.adl.oauth2.client.id</name>
+  <value>CLIENTID</value>
 </property>
+
+<property>
+  <name>fs.adl.oauth2.msi.tenant.id</name>
+  <value>TENANTID</value>
+</property>
+
 ```
 
 ### Using Device Code Auth for interactive login
