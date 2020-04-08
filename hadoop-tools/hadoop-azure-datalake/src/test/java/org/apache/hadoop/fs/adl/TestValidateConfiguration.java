@@ -50,6 +50,7 @@ import static org.apache.hadoop.fs.adl.AdlConfKeys
     .DEFAULT_WRITE_AHEAD_BUFFER_SIZE;
 import static org.apache.hadoop.fs.adl.AdlConfKeys.LATENCY_TRACKER_DEFAULT;
 import static org.apache.hadoop.fs.adl.AdlConfKeys.LATENCY_TRACKER_KEY;
+import static org.apache.hadoop.fs.adl.AdlConfKeys.MSI_AZURE_AD_TENANT_ID_KEY;
 import static org.apache.hadoop.fs.adl.AdlConfKeys.READ_AHEAD_BUFFER_SIZE_KEY;
 import static org.apache.hadoop.fs.adl.AdlConfKeys
     .TOKEN_PROVIDER_TYPE_CLIENT_CRED;
@@ -78,6 +79,8 @@ public class TestValidateConfiguration {
     assertEquals("fs.adl.oauth2.refresh.token",
         AZURE_AD_REFRESH_TOKEN_KEY);
     assertEquals("fs.adl.oauth2.credential", AZURE_AD_CLIENT_SECRET_KEY);
+    assertEquals("fs.adl.oauth2.msi.tenant.id", MSI_AZURE_AD_TENANT_ID_KEY);
+
     assertEquals("adl.debug.override.localuserasfileowner",
         ADL_DEBUG_OVERRIDE_LOCAL_USER_AS_OWNER);
 

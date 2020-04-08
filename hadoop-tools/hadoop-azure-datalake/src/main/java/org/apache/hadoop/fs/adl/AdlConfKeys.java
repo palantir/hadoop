@@ -60,8 +60,8 @@ public final class AdlConfKeys {
       "ClientCredential";
 
   // MSI Auth Configuration
-  public static final String MSI_PORT = "fs.adl.oauth2.msi.port";
-
+  public static final String MSI_AZURE_AD_TENANT_ID_KEY =
+          "fs.adl.oauth2.msi.tenant.id";
   // DeviceCode Auth configuration
   public static final String DEVICE_CODE_CLIENT_APP_ID =
       "fs.adl.oauth2.devicecode.clientapp.id";
