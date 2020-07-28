@@ -1001,11 +1001,17 @@ public class RMContainerAllocator extends RMContainerRequestor
   }
 
   private void handleJobPriorityChange(AllocateResponse response) {
-    Priority priorityFromResponse = Priority.newInstance(response
-        .getApplicationPriority().getPriority());
+    Priority priority = Priority.newInstance(0);
+    try {
+      priority = Priority.newInstance(response
+              .getApplicationPriority().getPriority());
+    } catch (Exception e) {
+      // palantir-hadoop only: ignore NPEs for compatibility with older clusters, along with
+      // any other exceptions to reduce iteration cycles
+    }
 
     // Update the job priority to Job directly.
-    getJob().setJobPriority(priorityFromResponse);
+    getJob().setJobPriority(priority);
   }
 
   @Private

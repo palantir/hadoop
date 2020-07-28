@@ -34,6 +34,7 @@ Based on Apache Hadoop tag `release-2.9.2-RC0`.
 * Manual backport of [HADOOP-15938](https://issues.apache.org/jira/browse/HADOOP-15938)
 * Comment out s3guard quantile creation in S3AInstrumentation as more aggressive version of [HADOOP-16278](https://issues.apache.org/jira/browse/HADOOP-16278)
 * Use wildfly-openssl in Azure Blob Store connector
+* Catch NPEs in RMContainerAllocator#handleJobPriorityChange for compatibility with older clusters
 
 # 2.9.2-palantir.9
 
