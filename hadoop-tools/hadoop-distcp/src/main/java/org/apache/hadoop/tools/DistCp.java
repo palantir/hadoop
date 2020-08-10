@@ -80,7 +80,7 @@ public class DistCp extends Configured implements Tool {
   private boolean submitted;
   private FileSystem jobFS;
 
-  private void prepareFileListing(Job job) throws Exception {
+  protected void prepareFileListing(Job job) throws Exception {
     if (context.shouldUseSnapshotDiff()) {
       // When "-diff" or "-rdiff" is passed, do sync() first, then
       // create copyListing based on snapshot diff.
@@ -376,7 +376,7 @@ public class DistCp extends Configured implements Tool {
    * @return Returns the path where the copy listing is created
    * @throws IOException - If any
    */
-  private Path createInputFileListingWithDiff(Job job, DistCpSync distCpSync)
+  protected Path createInputFileListingWithDiff(Job job, DistCpSync distCpSync)
       throws IOException {
     Path fileListingPath = getFileListingPath();
     CopyListing copyListing = new SimpleCopyListing(job.getConfiguration(),
