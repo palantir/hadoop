@@ -18,6 +18,8 @@
 package org.apache.hadoop.tools;
 
 import org.apache.hadoop.HadoopIllegalArgumentException;
+import org.apache.hadoop.classification.InterfaceAudience;
+import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
@@ -47,7 +49,9 @@ import java.util.HashSet;
  * target since s1. All the files/directories in the target are the same with
  * source.s1
  */
-class DistCpSync {
+@InterfaceAudience.Public
+@InterfaceStability.Evolving
+public class DistCpSync {
   private DistCpOptions inputOptions;
   private Configuration conf;
   // diffMap maps snapshot diff op type to a list of diff ops.
@@ -185,7 +189,7 @@ class DistCpSync {
    * EnumMap whose key is DiffType, and value is a DiffInfo list. If there is
    * no entry for a given DiffType, the associated value will be an empty list.
    */
-  private boolean getAllDiffs() throws IOException {
+  public boolean getAllDiffs() throws IOException {
     Path ssDir = isRdiff()?
         inputOptions.getTargetPath() : inputOptions.getSourcePaths().get(0);
 
