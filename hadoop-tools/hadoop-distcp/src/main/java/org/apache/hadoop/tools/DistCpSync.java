@@ -62,7 +62,7 @@ public class DistCpSync {
   private EnumMap<SnapshotDiffReport.DiffType, List<DiffInfo>> diffMap;
   private DiffInfo[] renameDiffs;
 
-  DistCpSync(DistCpContext context, Configuration conf) {
+  public DistCpSync(DistCpContext context, Configuration conf) {
     this.context = context;
     this.conf = conf;
   }
