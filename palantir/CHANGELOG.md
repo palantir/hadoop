@@ -19,6 +19,7 @@ Based on Apache Hadoop tag `release-2.9.2-RC0`.
 * Catch NPEs in RMContainerAllocator#handleJobPriorityChange for compatibility with older clusters
 * Initial patch for [MAPREDUCE-7292](https://issues.apache.org/jira/browse/MAPREDUCE-7292)
 * Upgrade commons-configuration to 1.7 and jsp-api to 2.1.1
+* Backport [HADOOP-16588](https://issues.apache.org/jira/browse/HADOOP-16588)
 
 # 2.9.2-palantir.13
 
