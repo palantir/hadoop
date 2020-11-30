@@ -235,7 +235,14 @@ public enum DistCpOptionSwitch {
    */
   DIRECT_WRITE(DistCpConstants.CONF_LABEL_DIRECT_WRITE,
       new Option("direct", false, "Write files directly to the"
-          + " target location, avoiding temporary file rename."));
+          + " target location, avoiding temporary file rename.")),
+
+  /**
+   * Paths in filters file are included in the copy. Everything else is excluded.
+   */
+  USE_INCLUDE_FILTER(DistCpConstants.CONF_LABEL_USE_INCLUDE_FILTER,
+    new Option("useIncludeFilter", false, "Paths in filters file are"
+      + " included in the copy. Everything else is excluded."));
 
 
   public static final String PRESERVE_STATUS_DEFAULT = "-prbugpct";

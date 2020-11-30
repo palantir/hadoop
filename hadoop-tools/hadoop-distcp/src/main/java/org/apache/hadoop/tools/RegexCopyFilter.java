@@ -46,14 +46,24 @@ public class RegexCopyFilter extends CopyFilter {
   private static final Logger LOG = LoggerFactory.getLogger(RegexCopyFilter.class);
   private File filtersFile;
   private List<Pattern> filters;
+  private boolean useIncludeFilter;
 
   /**
    * Constructor, sets up a File object to read filter patterns from and
    * the List to store the patterns.
    */
   protected RegexCopyFilter(String filtersFilename) {
+    this(filtersFilename, false);
+  }
+
+  /**
+   * Constructor, sets up a File object to read filter patterns from and
+   * the List to store the patterns. And sets up flag to use include filter.
+   */
+  protected RegexCopyFilter(String filtersFilename, boolean useIncludeFilterOption) {
     filtersFile = new File(filtersFilename);
     filters = new ArrayList<>();
+    useIncludeFilter = useIncludeFilterOption;
   }
 
   /**
@@ -96,9 +106,9 @@ public class RegexCopyFilter extends CopyFilter {
   public boolean shouldCopy(Path path) {
     for (Pattern filter : filters) {
       if (filter.matcher(path.toString()).matches()) {
-        return false;
+        return useIncludeFilter;
       }
     }
-    return true;
+    return !useIncludeFilter;
   }
 }

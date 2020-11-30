@@ -183,6 +183,10 @@ public class DistCpContext {
     return options.shouldDirectWrite();
   }
 
+  public boolean shouldUseIncludeFilter() {
+    return options.shouldUseIncludeFilter();
+  }
+
   public void setTargetPathExists(boolean targetPathExists) {
     this.targetPathExists = targetPathExists;
   }
