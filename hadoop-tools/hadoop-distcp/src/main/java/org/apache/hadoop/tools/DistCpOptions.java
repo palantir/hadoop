@@ -158,6 +158,9 @@ public final class DistCpOptions {
   /** Whether data should be written directly to the target paths. */
   private final boolean directWrite;
 
+  /** Paths in filtersFile will be used to include paths instead of exclude them. */
+  private final boolean useIncludeFilter;
+
   /**
    * File attributes for preserve.
    *
@@ -221,6 +224,8 @@ public final class DistCpOptions {
     this.trackPath = builder.trackPath;
 
     this.directWrite = builder.directWrite;
+
+    this.useIncludeFilter = builder.useIncludeFilter;
   }
 
   public Path getSourceFileListing() {
@@ -352,6 +357,10 @@ public final class DistCpOptions {
     return directWrite;
   }
 
+  public boolean shouldUseIncludeFilter() {
+    return useIncludeFilter;
+  }
+
   /**
    * Add options to configuration. These will be used in the Mapper/committer
    *
@@ -402,6 +411,8 @@ public final class DistCpOptions {
     }
     DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.DIRECT_WRITE,
             String.valueOf(directWrite));
+    DistCpOptionSwitch.addToConf(conf, DistCpOptionSwitch.USE_INCLUDE_FILTER,
+            String.valueOf(useIncludeFilter));
   }
 
   /**
@@ -439,6 +450,7 @@ public final class DistCpOptions {
         ", copyBufferSize=" + copyBufferSize +
         ", verboseLog=" + verboseLog +
         ", directWrite=" + directWrite +
+        ", useIncludeFilter=" + useIncludeFilter +
         '}';
   }
 
@@ -489,6 +501,7 @@ public final class DistCpOptions {
             DistCpConstants.COPY_BUFFER_SIZE_DEFAULT;
 
     private boolean directWrite = false;
+    private boolean useIncludeFilter = false;
 
     public Builder(List<Path> sourcePaths, Path targetPath) {
       Preconditions.checkArgument(sourcePaths != null && !sourcePaths.isEmpty(),
@@ -598,6 +611,11 @@ public final class DistCpOptions {
       if (verboseLog && logPath == null) {
         throw new IllegalArgumentException(
             "-v is valid only with -log option");
+      }
+
+      if (useIncludeFilter && StringUtils.isBlank(filtersFile)) {
+        throw new IllegalArgumentException(
+            "-useIncludeFilter is valid only with -filters option");
       }
     }
 
@@ -745,6 +763,11 @@ public final class DistCpOptions {
 
     public Builder withDirectWrite(boolean newDirectWrite) {
       this.directWrite = newDirectWrite;
+      return this;
+    }
+
+    public Builder withUseIncludeFilter(boolean newUseIncludeFilter) {
+      this.useIncludeFilter = newUseIncludeFilter;
       return this;
     }
   }

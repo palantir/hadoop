@@ -54,7 +54,9 @@ public abstract class CopyFilter {
     } else {
       String filterFilename = conf.get(
           DistCpConstants.CONF_LABEL_FILTERS_FILE);
-      return new RegexCopyFilter(filterFilename);
+      boolean useIncludeFilter = conf.getBoolean(
+          DistCpConstants.CONF_LABEL_USE_INCLUDE_FILTER, false);
+      return new RegexCopyFilter(filterFilename, useIncludeFilter);
     }
   }
 }
