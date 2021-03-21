@@ -36,14 +36,12 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/x
 
   <distributionManagement>
     <repository>
-      <id>${distMgmtStagingId}</id>
-      <name>${distMgmtStagingName}</name>
-      <url>${distMgmtStagingUrl}</url>
+      <id>bintray-palantir-release</id>
+      <url>https://api.bintray.com/maven/palantir/releases/hadoop/</url>
     </repository>
     <snapshotRepository>
-      <id>${distMgmtSnapshotsId}</id>
-      <name>${distMgmtSnapshotsName}</name>
-      <url>${distMgmtSnapshotsUrl}</url>
+      <id>bintray-palantir-release</id>
+      <url>https://api.bintray.com/maven/palantir/releases/hadoop/</url>
     </snapshotRepository>
     <site>
       <id>apache.website</id>
