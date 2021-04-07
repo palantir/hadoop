@@ -1,3 +1,11 @@
+This is our internal fork of Apache Hadoop. It was ported from https://github.com/palantir/hadoop. It produces
+the dist which we use server side in the sls-hdfs-yarn Skylab modules, as well as the JARs which we use client-side
+in our many libraries and services which depend on Hadoop libraries.
+
+--------------------
+
+Original README:
+
 For the latest information about Hadoop, please visit our website at:
 
    http://hadoop.apache.org/

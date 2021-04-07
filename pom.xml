@@ -36,13 +36,9 @@ xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/x
 
   <distributionManagement>
     <repository>
-      <id>bintray-palantir-release</id>
-      <url>https://api.bintray.com/maven/palantir/releases/hadoop/</url>
+      <!-- URL of the repository is passed in via -DaltDeploymentRepository from palantir/publish.sh -->
+      <id>internal-palantir-repository</id>
     </repository>
-    <snapshotRepository>
-      <id>bintray-palantir-release</id>
-      <url>https://api.bintray.com/maven/palantir/releases/hadoop/</url>
-    </snapshotRepository>
     <site>
       <id>apache.website</id>
       <url>scpexe://people.apache.org/www/hadoop.apache.org/docs/r${project.version}</url>
