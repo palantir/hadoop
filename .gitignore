@@ -52,3 +52,6 @@ patchprocess/
 hadoop-yarn-project/hadoop-yarn/hadoop-yarn-ui/src/main/webapp/package-lock.json
 hadoop-yarn-project/hadoop-yarn/hadoop-yarn-ui/src/main/webapp/yarn-error.log
 
+# palantir-hadoop additions
+local_deploy/
+*.versionsBackup
