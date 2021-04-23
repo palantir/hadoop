@@ -210,12 +210,13 @@ public class ContainerLauncherImpl extends AbstractService implements
         try {
           proxy = getCMProxy(this.containerMgrAddress, this.containerID);
 
-          if (dumpThreads) {
-            final SignalContainerRequest request = SignalContainerRequest
-                .newInstance(containerID,
-                    SignalContainerCommand.OUTPUT_THREAD_DUMP);
-            proxy.getContainerManagementProtocol().signalToContainer(request);
-          }
+//          palantir-hadoop: This isn't wire-compatible with older clusters, so don't try it.
+//          if (dumpThreads) {
+//            final SignalContainerRequest request = SignalContainerRequest
+//                .newInstance(containerID,
+//                    SignalContainerCommand.OUTPUT_THREAD_DUMP);
+//            proxy.getContainerManagementProtocol().signalToContainer(request);
+//           }
 
           // kill the remote container if already launched
           List<ContainerId> ids = new ArrayList<ContainerId>();
