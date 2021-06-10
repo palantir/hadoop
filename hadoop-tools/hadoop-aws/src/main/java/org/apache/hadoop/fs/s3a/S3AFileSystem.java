@@ -798,24 +798,9 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities {
     entryPoint(INVOCATION_CREATE);
     final Path path = qualify(f);
     String key = pathToKey(path);
-    FileStatus status = null;
-    try {
-      // get the status or throw an FNFE
-      status = getFileStatus(path);
 
-      // if the thread reaches here, there is something at the path
-      if (status.isDirectory()) {
-        // path references a directory: automatic error
-        throw new FileAlreadyExistsException(path + " is a directory");
-      }
-      if (!overwrite) {
-        // path references a file and overwrite is disabled
-        throw new FileAlreadyExistsException(path + " already exists");
-      }
-      LOG.debug("Overwriting file {}", path);
-    } catch (FileNotFoundException e) {
-      // this means the file is not found
-
+    if (!overwrite && exists(f)) {
+      throw new FileAlreadyExistsException(f + " already exists");
     }
     instrumentation.fileCreated();
     PutTracker putTracker =
