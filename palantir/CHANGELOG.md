@@ -1,4 +1,4 @@
-# 3.2.2-palantir.4
+# 3.2.2-palantir.4 
 
 Based on Apache Hadoop tag `release-3.2.2-RC5`. Includes changes meant for both server side and client side use.
 
